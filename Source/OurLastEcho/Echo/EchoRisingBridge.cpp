@@ -90,8 +90,9 @@ void AEchoRisingBridge::Tick(float DeltaSeconds)
 void AEchoRisingBridge::ApplyRaiseAlpha(float Alpha)
 {
 	const float Eased = FMath::InterpEaseInOut(0.0f, 1.0f, Alpha, 2.0f);
-	const FVector RaisedLocation(0.0f, 0.0f, -BridgeSize.Z * 0.5f);
-	BridgeMesh->SetRelativeLocation(RaisedLocation + LoweredOffset * (1.0f - Eased));
+	const FQuat Swing = FQuat::Slerp(StartRotationOffset.Quaternion(), FQuat::Identity, Eased);
+	const FVector MeshCentre(bHingeAtStart ? BridgeSize.X * 0.5f : 0.0f, 0.0f, -BridgeSize.Z * 0.5f);
+	BridgeMesh->SetRelativeLocationAndRotation(Swing.RotateVector(MeshCentre) + LoweredOffset * (1.0f - Eased), Swing);
 }
 
 void AEchoRisingBridge::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

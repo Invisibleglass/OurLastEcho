@@ -20,6 +20,10 @@ protected:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="Echo")
 	bool bMilestoneComplete = false;
 
+	/** Debug: every spirit and echo platform is shown to both players (EchoShowAllPlatforms console command) */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category="Echo|Debug")
+	bool bDebugShowAllPlatforms = false;
+
 public:
 
 	/** Marks the milestone complete for everyone. Server only */
@@ -27,6 +31,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Echo")
 	bool IsMilestoneComplete() const { return bMilestoneComplete; }
+
+	/** Server only. Use AOurLastEchoCharacter::RequestShowAllPlatforms from a client */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Echo|Debug")
+	void SetDebugShowAllPlatforms(bool bShow);
+
+	UFUNCTION(BlueprintPure, Category="Echo|Debug")
+	bool IsDebugShowAllPlatforms() const { return bDebugShowAllPlatforms; }
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

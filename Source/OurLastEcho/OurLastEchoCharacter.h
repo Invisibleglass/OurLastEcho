@@ -12,6 +12,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UMaterialInterface;
+class UEchoSpiritBowComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -32,6 +33,10 @@ class AOurLastEchoCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
+
+	/** Spirit bow. Every character has one, but only a Living-realm character (Bat) can use it; tune it on BP_ThirdPersonCharacter */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UEchoSpiritBowComponent> SpiritBow;
 	
 protected:
 
@@ -71,10 +76,28 @@ public:
 	UFUNCTION(BlueprintPure, Category="Echo")
 	EEchoRealm GetRealm() const { return Realm; }
 
-	/** Teleports the character back to where it spawned. Server only; movement replication corrects the client */
+	/** Teleports the character back to its respawn point (its spawn, or the last checkpoint). Server only; movement replication corrects the client */
 	void RespawnAtStart();
 
+	/** Server: where RespawnAtStart sends this character from now on (used by AEchoCheckpoint) */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Echo")
+	void SetRespawnTransform(const FTransform& NewRespawnTransform);
+
+	UFUNCTION(BlueprintPure, Category="Echo")
+	FTransform GetRespawnTransform() const { return RespawnTransform; }
+
+	/** Debug console command: toggles showing every spirit and echo platform to BOTH players */
+	UFUNCTION(Exec)
+	void EchoShowAllPlatforms();
+
+	/** Turns the show-all-platforms debug view on or off for both players (asks the server if called on a client) */
+	UFUNCTION(BlueprintCallable, Category="Echo|Debug")
+	void RequestShowAllPlatforms(bool bShow);
+
 protected:
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetShowAllPlatforms(bool bShow);
 
 	/** Applies realm-specific collision once components exist */
 	virtual void PostInitializeComponents() override;
@@ -120,5 +143,8 @@ public:
 
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+	/** Returns the spirit bow component */
+	FORCEINLINE UEchoSpiritBowComponent* GetSpiritBow() const { return SpiritBow; }
 };
 

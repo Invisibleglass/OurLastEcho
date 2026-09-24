@@ -8,7 +8,7 @@
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "EchoTypes.h"
-#include "OurLastEchoCharacter.h"
+#include "EchoVisibility.h"
 
 AEchoSpiritPlatform::AEchoSpiritPlatform()
 {
@@ -72,14 +72,9 @@ void AEchoSpiritPlatform::UpdateLocalVisibility()
 		return;
 	}
 
-	bool bShouldShow = false;
-	if (const APlayerController* PC = GEngine->GetFirstLocalPlayerController(GetWorld()))
-	{
-		if (const AOurLastEchoCharacter* Character = Cast<AOurLastEchoCharacter>(PC->GetPawn()))
-		{
-			bShouldShow = Character->GetRealm() == EEchoRealm::Spirit;
-		}
-	}
+	EEchoRealm Viewer = EEchoRealm::Living;
+	const bool bShouldShow = (EchoVisibility::GetLocalViewerRealm(GetWorld(), Viewer) && Viewer == EEchoRealm::Spirit)
+		|| EchoVisibility::IsDebugShowAll(GetWorld());
 
 	if (bShouldShow != bLocallyVisible)
 	{

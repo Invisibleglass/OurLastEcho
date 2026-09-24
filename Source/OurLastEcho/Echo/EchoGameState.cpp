@@ -15,9 +15,20 @@ void AEchoGameState::SetMilestoneComplete()
 	bMilestoneComplete = true;
 }
 
+void AEchoGameState::SetDebugShowAllPlatforms(bool bShow)
+{
+	if (HasAuthority() && bDebugShowAllPlatforms != bShow)
+	{
+		UE_LOG(LogOurLastEcho, Log, TEXT("Debug: show all platforms %s"), bShow ? TEXT("ON") : TEXT("OFF"));
+		bDebugShowAllPlatforms = bShow;
+		ForceNetUpdate();
+	}
+}
+
 void AEchoGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AEchoGameState, bMilestoneComplete);
+	DOREPLIFETIME(AEchoGameState, bDebugShowAllPlatforms);
 }

@@ -11,6 +11,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "OurLastEcho.h"
+#include "EchoGameState.h"
+#include "EchoSpiritBowComponent.h"
 
 AOurLastEchoCharacter::AOurLastEchoCharacter()
 {
@@ -45,6 +47,8 @@ AOurLastEchoCharacter::AOurLastEchoCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+
+	SpiritBow = CreateDefaultSubobject<UEchoSpiritBowComponent>(TEXT("SpiritBow"));
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
@@ -94,6 +98,40 @@ void AOurLastEchoCharacter::RespawnAtStart()
 	TeleportTo(RespawnTransform.GetLocation(), RespawnTransform.Rotator(), false, true);
 }
 
+void AOurLastEchoCharacter::SetRespawnTransform(const FTransform& NewRespawnTransform)
+{
+	if (HasAuthority())
+	{
+		RespawnTransform = NewRespawnTransform;
+	}
+}
+
+void AOurLastEchoCharacter::EchoShowAllPlatforms()
+{
+	const AEchoGameState* GameState = GetWorld()->GetGameState<AEchoGameState>();
+	RequestShowAllPlatforms(!(GameState && GameState->IsDebugShowAllPlatforms()));
+}
+
+void AOurLastEchoCharacter::RequestShowAllPlatforms(bool bShow)
+{
+	if (HasAuthority())
+	{
+		ServerSetShowAllPlatforms_Implementation(bShow);
+	}
+	else
+	{
+		ServerSetShowAllPlatforms(bShow);
+	}
+}
+
+void AOurLastEchoCharacter::ServerSetShowAllPlatforms_Implementation(bool bShow)
+{
+	if (AEchoGameState* GameState = GetWorld()->GetGameState<AEchoGameState>())
+	{
+		GameState->SetDebugShowAllPlatforms(bShow);
+	}
+}
+
 void AOurLastEchoCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	// Set up action bindings
@@ -109,6 +147,9 @@ void AOurLastEchoCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 
 		// Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AOurLastEchoCharacter::Look);
+
+		// Spirit bow (only binds for Bat)
+		SpiritBow->SetupPlayerInput(EnhancedInputComponent);
 	}
 	else
 	{

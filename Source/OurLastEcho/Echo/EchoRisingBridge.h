@@ -10,9 +10,13 @@ class UStaticMeshComponent;
 class UMaterialInterface;
 
 /**
- *  A normal (both-realm) bridge that starts sunk below its placed position and rises when Raise() is called.
- *  Only the raised flag is replicated; every machine plays the rise animation locally so it's smooth for everyone.
- *  In the editor it shows at its raised position (the actor origin is the bridge's top surface centre).
+ *  A normal (both-realm) bridge that starts out of place and moves into its placed position when Raise() is called:
+ *  - Milestone 1's bridge rises from below (LoweredOffset).
+ *  - With bHingeAtStart and StartRotationOffset it's a drawbridge-style ramp that swings down about its start edge
+ *    (The Climb's ramp for Bat).
+ *  Only the raised flag is replicated; every machine plays the animation locally so it's smooth for everyone.
+ *  In the editor it shows at its final position. The actor origin is the top surface centre, or with
+ *  bHingeAtStart, the centre of the hinge edge (the bridge extends along +X from there).
  */
 UCLASS()
 class AEchoRisingBridge : public AActor
@@ -31,6 +35,14 @@ protected:
 	/** Offset from the raised position while lowered */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Bridge")
 	FVector LoweredOffset = FVector(0.0f, 0.0f, -800.0f);
+
+	/** If true the actor origin is the -X edge (the hinge) instead of the centre */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Bridge")
+	bool bHingeAtStart = false;
+
+	/** Rotation about the origin before Raise(); it swings from this to its placed rotation (e.g. Pitch 100 = stowed upright) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Bridge")
+	FRotator StartRotationOffset = FRotator::ZeroRotator;
 
 	/** Seconds the rise takes */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Bridge", meta = (ClampMin = 0.1))
@@ -52,6 +64,13 @@ public:
 	/** Starts raising the bridge for everyone. Server only */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Bridge")
 	void Raise();
+
+	UFUNCTION(BlueprintPure, Category="Bridge")
+	bool IsRaised() const { return bRaised; }
+
+	/** 0 = start pose, 1 = in place (local animation progress) */
+	UFUNCTION(BlueprintPure, Category="Bridge")
+	float GetRaiseProgress() const { return RaiseAlpha; }
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 

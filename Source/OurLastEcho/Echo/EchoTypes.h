@@ -21,3 +21,11 @@ enum class EEchoRealm : uint8
  *  Spirit platforms block ONLY this channel, so only Spirit characters can stand on them.
  */
 #define ECC_SpiritPawn ECC_GameTraceChannel1
+
+/**
+ *  Object channel used by spirit bow arrows. Defined as "EchoArrow" in Config/DefaultEngine.ini.
+ *  Its default response is Block, so walls, rocks and the landscape stop arrows. Echo platforms have a
+ *  hit box that blocks ONLY this channel, so arrows (and the bow's aim trace) can hit a platform that
+ *  nobody can stand on yet.
+ */
+#define ECC_EchoArrow ECC_GameTraceChannel2
