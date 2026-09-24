@@ -50,5 +50,6 @@ The user can also run them from inside the open editor (Output Log → switch th
 
 ## Git
 
+- Remote `origin` → `https://github.com/Invisibleglass/OurLastEcho.git`, default branch `main`. GitHub's free LFS quota is 1 GB of storage and 1 GB/month of bandwidth (the initial push was about 141 MB), so watch it once large art or audio arrives.
 - `.uasset`, `.umap` and source-art/audio files are tracked with **Git LFS** (see `.gitattributes`). Don't bypass LFS for binaries; GitHub rejects files over 100 MB.
 - Ignored: `Binaries/`, `Intermediate/`, `Saved/`, `DerivedDataCache/`, `.vs/`, generated `.sln`/`.slnx`, and `Content/Developers/`. The solution can be regenerated with right-click `.uproject` → *Generate Visual Studio project files*.
