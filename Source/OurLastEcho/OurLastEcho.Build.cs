@@ -21,7 +21,13 @@ public class OurLastEcho : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Landscape" });
+
+		// Editor-only builder helpers (EchoEditorLibrary)
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
 
 		PublicIncludePaths.AddRange(new string[] {
 			"OurLastEcho",
