@@ -70,6 +70,12 @@ def configure_spawner(graph):
         descriptor = entry.get_editor_property("descriptor")
         descriptor.set_editor_property("static_mesh", eal.load_asset(path))
         descriptor.set_editor_property("override_materials", [material])
+        # PCG spawns instances with NoCollision by default; rocks must be solid for both realms
+        # (BlockAll blocks every channel, including the custom SpiritPawn one)
+        body = descriptor.get_editor_property("body_instance")
+        body.set_editor_property("collision_profile_name", "BlockAll")
+        body.set_editor_property("collision_enabled", unreal.CollisionEnabled.QUERY_AND_PHYSICS)
+        descriptor.set_editor_property("body_instance", body)
         entry.set_editor_property("descriptor", descriptor)
         entries.append(entry)
     selector.set_editor_property("mesh_entries", entries)

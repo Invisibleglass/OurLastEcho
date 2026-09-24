@@ -144,7 +144,8 @@ def build_rock_material():
         mel.delete_all_material_expressions(mat)
     else:
         mat = asset_tools.create_asset("M_CanyonRock", MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
-    wp =expr(mat, unreal.MaterialExpressionWorldPosition, -1800, 0)
+    mat.set_editor_property("used_with_instanced_static_meshes", True)   # PCG rocks are ISMs
+    wp = expr(mat, unreal.MaterialExpressionWorldPosition, -1800, 0)
     mask_x = expr(mat, unreal.MaterialExpressionComponentMask, -1600, -200, r=True, g=False, b=False, a=False)
     mask_y = expr(mat, unreal.MaterialExpressionComponentMask, -1600, 0, r=False, g=True, b=False, a=False)
     mask_z = expr(mat, unreal.MaterialExpressionComponentMask, -1600, 200, r=False, g=False, b=True, a=False)
@@ -362,15 +363,27 @@ def near_ravine(x):
     return RAVINE_X[0] - 1600 < x < RAVINE_X[1] + 1600
 
 
+def face_chord(side, x, extra):
+    """
+    The stretch of wall face (offset `extra` cm into the rock) belonging to the segment at station x:
+    (midpoint xy, yaw, length, outward normal). Segments are spaced evenly along the centreline, but
+    on the outside of a bend the face line is longer, so pieces must be sized from this chord (not
+    from SEGMENT) or gaps open between them.
+    """
+    p0 = face_point(side, x - SEGMENT / 2, extra)
+    p1 = face_point(side, x + SEGMENT / 2, extra)
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    length = math.hypot(dx, dy)
+    normal = (-dy / length * side, dx / length * side)
+    return ((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2), math.degrees(math.atan2(dy, dx)), length, normal
+
+
 def build_wall(side, rock):
     name = "L" if side < 0 else "R"
     count = 0
     x = X_START_END - 1000
     k = 0
     while x <= X_FAR_END + 1000:
-        yaw = centre_yaw(x)
-        nx, ny = outward(side, x)
-        w = half_width(side, x)
         total = wall_height(side, x) + rng.uniform(-500, 500)
         base = -1700.0 if near_ravine(x) else -500.0
 
@@ -389,17 +402,18 @@ def build_wall(side, rock):
                 inset += rng.uniform(120, 600)
                 jitter, yaw_j, tilt = rng.uniform(0, 250), rng.uniform(-7, 7), 3.0
             depth = 3200.0
-            length = SEGMENT * rng.uniform(1.25, 1.6)
-            dist = w + 60.0 + inset + jitter + depth / 2
-            center = (x + nx * dist, centre_y(x) + ny * dist, (z_bot + z_top) / 2)
+            (mx, my), yaw, chord, (nx, ny) = face_chord(side, x, 60.0 + inset + jitter)
+            length = chord * rng.uniform(1.2, 1.45) + 150.0   # overlap the neighbours
+            center = (mx + nx * depth / 2, my + ny * depth / 2, (z_bot + z_top) / 2)
             rot = (rng.uniform(-tilt, tilt), yaw + yaw_j, rng.uniform(-tilt, tilt))
             rock_block(f"Wall_{name}_{k:02d}_{i}", center, (length, depth, z_top - z_bot), rot, rock, f"Canyon/Walls_{name}")
             count += 1
             z_bot = z_top - rng.uniform(80, 250)   # small overlap so strata read as layers, not gaps
 
-        # Invisible wall just in front of the rock face, from below the ravine to far above the rim
-        bx, by = face_point(side, x, 30.0 + 250.0)   # box is 500 deep, inner face 30 cm in front of the rock
-        boundary(f"Bound_{name}_{k:02d}", (bx, by, 6000.0), (SEGMENT * 1.3, 500.0, 16000.0), yaw)
+        # Invisible wall just in front of the rock face, from below the ravine to far above the rim.
+        # 500 deep, inner face 30 cm in front of the rock, overlapping its neighbours by 1-2 m
+        (mx, my), yaw, chord, (nx, ny) = face_chord(side, x, 30.0)
+        boundary(f"Bound_{name}_{k:02d}", (mx + nx * 250, my + ny * 250, 6000.0), (chord * 1.15 + 200.0, 500.0, 16000.0), yaw)
         x += SEGMENT
         k += 1
     return count
@@ -554,8 +568,10 @@ def main():
     log(f"done: {total} canyon actors")
 
 
-try:
-    main()
-except Exception as e:
-    import traceback
-    log(f"FAILED: {e!r}\n{traceback.format_exc()}")
+# Scripts/test_canyon_live.py loads this file just for the layout functions, with ECHO_CANYON_NO_BUILD set
+if not globals().get("ECHO_CANYON_NO_BUILD"):
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        log(f"FAILED: {e!r}\n{traceback.format_exc()}")
