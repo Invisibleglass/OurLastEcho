@@ -8,7 +8,7 @@ Tested on 2026-09-24 on branch `milestone-2-canyon`, before any Milestone 2 chan
 
 - **Compile:** the editor was open (Live Coding blocks editor builds), so I built the standalone **Game** target instead: `Build.bat OurLastEcho Win64 Development`. It compiles the same module code with the same warning settings, without touching the editor's DLL.
 - **Level contents:** `Scripts/dump_level.py` was run in the open editor. It's read-only and lists every actor with its class, folder, position, bounds and gameplay settings.
-- **Live 2-player test:** the MCP `StartPIE` tool started a real PIE session. The editor's play settings are 2 players, *Play As Listen Server*, which gives a server window (Bat) and a client window (Saraa). `Scripts/test_pie_live.py` then ran inside the editor. It moves the characters on the **server** world (server-authoritative) and checks what the **client** world ends up with, so it covers replication as well as game logic. 28 checks, last line `PASS`.
+- **Live 2-player test:** the MCP `StartPIE` tool started a real PIE session. The editor's play settings are 2 players, *Play As Listen Server*, which gives a server window (Bat) and a client window (Saraa). `Scripts/test_pie_live.py` then ran inside the editor. It moves the characters on the **server** world (server-authoritative) and checks what the **client** world ends up with, so it covers replication as well as game logic. 29 checks, last line `PASS`.
 - **Visual check:** MCP screenshots of both PIE windows were taken at the end of the run (see below).
 
 The MCP server has no tool for running Python directly. Its UI-automation toolset (`SlateInspectorToolset`) can type into the editor's `Cmd` console box, though, so scripts run with `py exec(open(r'<path>').read())`. Output goes to `Saved/Logs/OurLastEcho.log`.
@@ -28,9 +28,9 @@ The MCP server has no tool for running Python directly. Its UI-automation toolse
 | 9 | Falling into the pit respawns you | ✅ Pass | Bat dropped into the pit was back at the start (x = −1200) within a few seconds. |
 | 10 | End zone triggers **only when both players are inside** | ✅ Pass | Bat alone: not complete. Bat + Saraa: complete on the server, and replicated to the client. |
 | 11 | "Milestone complete" shows on both screens | ✅ Pass | Seen in screenshots of both the server (Bat) and client (Saraa) PIE windows. Saraa renders as the pale translucent ghost on both. |
-| 12 | Frame rate in 2-player PIE | ⚠️ See note | The test measured about 8 fps. That was with the editor window in the **background**, where the editor throttles itself on purpose. It's re-measured with throttling off after the canyon is built; see NOTES.md → Performance. |
+| 12 | Frame rate in 2-player PIE | ⚠️ Needs manual test | The test measured about 8 fps, but only because the editor was a **background** window. On this machine a background editor runs at 7–8 fps even with no PIE running and the editor's own throttling turned off, so the number reflects Windows/editor throttling, not the game. Needs `stat fps` with the editor focused. See NOTES.md → Performance. |
 
-Nothing is marked "needs manual test". The MCP server could run 2-player PIE, so everything was checked live. The one thing no script can judge is **feel**: jump distances, camera and readability. That's worth a quick play by a human.
+Apart from the frame rate (item 12), nothing needs a manual test. The MCP server could run 2-player PIE, so everything was checked live. The one thing no script can judge is **feel**: jump distances, camera and readability. That's worth a quick play by a human.
 
 ## Things I noticed but didn't change
 
@@ -47,3 +47,15 @@ None of these are bugs in current play. They're logged instead of fixed, as the 
   `py exec(open(r'D:/Creating games in term 4/My Own games/OurLastEcho/OurLastEcho/Scripts/test_pie_live.py').read())`
   and read the `ECHO_PIE` lines in the Output Log. The last one is `PASS` or `FAIL`.
 - **Editor closed:** `powershell -File Scripts/run_spirit_path_test.ps1` (the Milestone 1 headless single-process test).
+
+## Re-test after the Milestone 2 canyon
+
+The canyon was built around the Spirit Path afterwards (see NOTES.md), so the tests were run again at the end of Milestone 2:
+
+| Test | Result | Notes |
+|---|---|---|
+| `test_pie_live.py` (all Milestone 1 items above) | ✅ Pass, 29/29 | Fresh 2-player PIE session with the full canyon in place. |
+| Milestone 1 actors unchanged | ✅ Pass | `dump_level.py` before and after: all 14 gameplay actors are in the same position, size and settings. Only the Sun angle and fog height were retuned for the canyon lighting. |
+| `test_canyon_live.py` (new) | ✅ Pass, 34/34 | Both realms: floor, overlook, ramp and rocks are solid; walls hold every 5 m at 15 m and 90 m up; both ends hold; the canyon kill volume respawns; no rocks on the Spirit Path. |
+
+The canyon test found three Milestone 2 bugs, all **fixed** before the final run: a boundary gap on the outside of the far bend, PCG rocks with no collision, and 2-player PIE running out of video memory. Details are in NOTES.md.

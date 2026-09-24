@@ -1,3 +1,106 @@
+# Milestone 2 – Testing the Spirit Path, and building the canyon
+
+Branch: `milestone-2-canyon`. Built and tested live through the Unreal MCP server, with the editor open.
+
+## Phase 1: Milestone 1 test
+
+See **`TEST_REPORT.md`**. Every Milestone 1 item passed in a real 2-player listen-server PIE session (29 checks, including replication to the client), and nothing needed fixing. After the canyon was built, the same test was run again and still passes.
+
+## What was built
+
+**Layout.** Coordinates are in cm. The Spirit Path runs along +X at Y = 0, from X = −1500 to 3600.
+
+| | |
+|---|---|
+| Length | About 350 m. The canyon is closed by rock end caps **150 m before the start** (X = −16 500) and **150 m past the far side** (X = 18 600). |
+| Floor width | 37–52 m. Each wall is placed from control points, so the width varies. |
+| Wall height | 40–80 m, varying per side, plus ±5 m per segment. |
+| Bends | The canyon is straight around the play area and bends away at both ends, 55 m sideways toward −Y at the start and 65 m toward +Y at the far end, so you can't see out of either end. |
+| Ravine | Bat's pit now cuts **right across the canyon**, wall to wall, between X = 0 and 1600, so nobody can walk around the Spirit Path puzzle. Its floor is inside the Milestone 1 respawn volume. |
+| Overlook | A raised rock shelf 9 m up on the +Y wall, just past the end zone (X 30–44 m), reached by a 26 m ramp from the far side. It's the future vista point. |
+
+**How it's built** (all in `Lvl_SpiritPath`; Milestone 1 actors weren't moved or resized):
+- **Landscape `CanyonFloor`:** 378 × 252 m, 1 m resolution, 24 components. It has a gentle rolling floor, a talus apron rising into each wall and rockfall slopes into the end caps. It's flattened to just under the Milestone 1 slabs. Python has no API for creating landscapes, so there's a small editor-only C++ helper, `UEchoEditorLibrary::CreateLandscapeFromHeights`, that does what Landscape mode's *New Landscape* does.
+- **Walls:** 251 engine cubes (`/Engine/BasicShapes/Cube`) stacked in 4–6 strata per 14 m segment. Each stratum is set back 1–6 m from the one below (terraces) and slightly rotated, so the walls read as layered sandstone rather than flat walls. On the outside of each bend, pieces are sized from the actual face line so they always overlap (see *Bugs found* below).
+- **Rocks (PCG):** `/Game/Echo/PCG/PCG_CanyonRocks` was built node by node through the MCP PCG toolset. It samples the landscape twice: dense large rocks on the talus at the wall bases, and sparse boulders on the open floor. It removes points inside `EchoRockExclusion` boxes (the Spirit Path and the overlook ramp), prunes overlaps and spawns about **440 instances** in 3 ISMs (LevelPrototyping ChamferCube, engine Sphere and Cone). The volume is set to **generate on demand only**: the result is saved in the level and never regenerates at runtime, so both players get identical rocks. The rocks have `BlockAll` collision (solid for both realms).
+- **Materials:** `M_CanyonRock` is texture-free. Horizontal sedimentary bands come from world-space Z (wobbled by X/Y), with occasional thin dark bands and gradient-noise brightness variation. It works on scaled cubes and on the landscape without UVs. There are three instances: `MI_CanyonRock` (walls), `MI_CanyonGround` (landscape, sandier) and `MI_CanyonBoulder` (rocks, tighter bands).
+- **Boundaries:** `AEchoBoundaryVolume` (new C++) is an invisible box that blocks **only** `Pawn` and `SpiritPawn`, so cameras and traces pass through. There's a chain of them along each wall face, from below the ravine to 140 m up, plus one across each end. Their outlines only draw when selected.
+- **Kill volume:** a second `EchoRespawnVolume` (`CanyonKillVolume`), 400 × 260 m, under the whole canyon floor. The original Milestone 1 one only covers the ravine area. Anyone who falls through respawns at their start point.
+- **Lighting:** the Milestone 1 lights were retuned. The Sun is low (19°) and warm, from down-canyon, and rakes across the +Y wall. The atmosphere has more dust (Mie) and less blue (Rayleigh). The height fog is warmer and dustier. An unbound `CanyonPostProcess` adds slight desaturation, warm gain and a vignette.
+
+**Scripts** (run in the **open editor**; see *How to test*):
+- `Scripts/build_canyon.py` builds the materials, landscape, walls, end caps, overlook, boundaries, kill volume and lighting. It deletes and rebuilds only actors tagged `CanyonBuilder`, and it's deterministic (fixed seed). It needs a rendering editor, because landscape edit layers merge on the GPU, so it won't work headless.
+- `Scripts/build_canyon_rocks.py` sets up the PCG rocks: mesh list and collision, exclusion zones and volume size, then regenerates. **Run it after every `build_canyon.py`.**
+- `Scripts/test_canyon_live.py` is a live 2-player PIE test of the canyon (34 checks, described below).
+- `Scripts/test_pie_live.py` is the live 2-player PIE test of Milestone 1 (29 checks).
+- `Scripts/dump_level.py` (read-only actor dump) and `Scripts/measure_fps.py`.
+
+**Choices where the brief was open** (simplest option, as asked):
+- **Starter Content isn't installed** in this engine (there's no pack in `D:\UE_5.8\FeaturePacks` or `Samples`), and importing it would add a lot to the 1 GB LFS quota. So everything uses engine BasicShapes plus the template's `LevelPrototyping` meshes, with new materials.
+- **Walls are scaled engine cubes**, not Modeling Mode or Geometry Script. The GeometryScripting plugin isn't enabled, and cubes are the most predictable to generate and test.
+- **The ravine spans the whole canyon.** Otherwise the new floor would let Bat walk around the pit and skip the puzzle.
+- **The overlook is reachable now**, via the ramp, so it can be tested. It's inside the boundaries.
+- **The editor Lumen setting** (`[SystemSettingsEditor] r.LumenScene.SurfaceCache.AtlasSize=2048`): see *Performance*.
+
+## How to test
+
+**Just play:** open the project; `Lvl_SpiritPath` loads. Press Play (2 players, Listen Server). Walk both characters away from the Spirit Path in both directions: around the bends to the end caps, up the ramp to the overlook, into the wall bases. Try to climb or jump out, and jump into the ravine away from the path.
+
+**Automated (editor open):** start PIE with the default 2-player listen-server settings. In the editor's Output Log console (Cmd), run:
+```
+py exec(open(r'D:/Creating games in term 4/My Own games/OurLastEcho/OurLastEcho/Scripts/test_canyon_live.py').read())
+```
+Read the `ECHO_CANYON_TEST` lines; the last is `PASS`/`FAIL`. It checks, for **both** Bat and Saraa:
+- standing on the landscape floor at 3 spots, on the overlook shelf, on the ramp, and on a PCG rock
+- being held by the boundary at **every 5 m along both walls**, at 15 m and at 90 m up (above every rim)
+- being stopped at both ends, at ground level and 90 m up
+- falling below the floor far down the canyon and respawning at the start
+- no rocks on the Spirit Path.
+
+Then **stop PIE, start a fresh one** and run `test_pie_live.py` the same way (Milestone 1, `ECHO_PIE` lines). The canyon test moves both characters around, so each test needs its own PIE session.
+
+**Rebuilding the canyon** (resets any hand edits to `CanyonBuilder` actors, but not to Milestone 1 actors): run `build_canyon.py`, then `build_canyon_rocks.py`, the same way (`py exec(open(r'...').read())`).
+
+## Results
+
+- `test_canyon_live.py`: **PASS** (34/34).
+- `test_pie_live.py` (Milestone 1, run after the canyon was built): **PASS** (29/29).
+- The level dump confirms all 14 Milestone 1 gameplay actors are exactly where Milestone 1 left them. Only the Sun angle and fog height (lighting) changed.
+- Both PIE windows were checked visually: warm ochre strata, dusty light, rocks at the wall bases, and "Milestone complete" on both screens.
+
+**Bugs the tests found (all fixed):**
+1. **A gap in the wall boundary on the outside of the far bend.** At rim height a player could have gone straight out at X ≈ 77 m. Wall pieces were spaced by centreline distance, but the face line on the outside of a curve is longer. They're now sized from the actual face-line chord (`face_chord` in `build_canyon.py`).
+2. **The PCG rocks had no collision.** The PCG spawner defaults to `NoCollision`, so players walked through them. They now use `BlockAll`.
+3. **2-player PIE ran out of video memory** with the canyon (the on-screen message was "Video memory has been exhausted", about 120 MB over budget on this 6 GB RTX 2060). Fixed with the editor-only Lumen setting above; see *Performance*.
+
+## Performance
+
+- **What the canyon adds:** 1 landscape (24 components), 251 cube actors, about 440 rock instances in 3 ISMs, 56 invisible boundary boxes, 1 post-process volume. That's modest for UE5.
+- **Frame rate: couldn't be measured meaningfully from here.** The editor was always a background window while I drove it, and on this machine a background editor runs at about 7–8 fps even with the level empty of PIE and "Use Less CPU when in Background" turned off. Milestone 1 measured the same 8 fps before the canyon existed. So those numbers measure Windows/editor throttling, not the level. **Please check it yourself:** click into the PIE window and type `stat fps` (or `stat unit`) in the console. `Scripts/measure_fps.py` also works if the editor is focused.
+- **GPU profile** (`ProfileGPU`, 2-player PIE, 2 views): no single canyon-related pass dominates. Shadow depths are about 1.5 ms and there are about 350k primitives per view. The largest costs are character skinning, hardware-ray-traced skinned-mesh updates and Lumen's radiance cache, all of which Milestone 1 already had. Absolute timings were inflated because the GPU was downclocked in the background.
+- **Video memory:** 2-player PIE renders two separate worlds on one GPU, so every per-scene buffer (Lumen surface cache, virtual shadow maps, distance fields) exists twice. Halving the Lumen surface cache atlas in the editor only freed about 500 MB and removed the warning, with no visible difference. A packaged game renders one world per machine and keeps the default.
+
+## Known issues
+
+- **The frame rate hasn't been measured with the editor focused.** See above; this needs a quick manual check.
+- **Re-running `build_spirit_path.py` (Milestone 1)** respawns the Sun, sky and fog with their old settings. Run `build_canyon.py` afterwards to re-apply the canyon lighting.
+- **The editor viewport looks brighter and more washed out than PIE,** because of auto-exposure and the editor view. Judge the look in PIE.
+- **The boundary sits up to about 0.6 m off the ideal face line,** and players are stopped 1–2 m from the rock on some stretches. It works, but the invisible wall might be noticeable against the rock. A future pass could use per-segment walls that follow the rocks more tightly.
+- **The landscape has no paint layers:** it uses one material and one colour variation. Hand-sculpting works, but `build_canyon.py` would overwrite it.
+- **After regenerating rocks,** the editor viewport briefly showed faint "ghost" circles where old rocks were (stale lighting cache). They weren't visible in PIE.
+- **Closing the editor through MCP hangs:** `QUIT_EDITOR` typed via the MCP server leaves the editor stuck in "Preparing to exit", because the MCP call never returns. Everything was saved, so ending the process was safe. It's better to close the editor by hand.
+- **Startup shows an "Asset Manager … GameFeatureData" load error.** It comes from the MCP `AllToolsets` plugin and is harmless.
+
+## Suggestions for Milestone 3
+
+- **Past and present canyons:** generalise the spirit platform's local-visibility trick into a reusable `UEchoRealmComponent` (visible/solid per realm) and put it on canyon pieces. For example, a rockfall that blocks the present but not the past, or an ancient bridge only Saraa has. `build_canyon.py` could tag realm variants.
+- **Checkpoints:** an `AEchoCheckpoint` volume that updates each character's respawn transform, so both kill volumes send players to the last checkpoint instead of the start.
+- **The vista moment:** use the overlook for a short camera or sound beat, with both players seeing their own era from the same spot.
+- **Better rocks:** enable GeometryScripting to generate irregular rock meshes (or build a small modular kit), and add landscape paint layers (sand, gravel, scree) with PCG scrub and small debris.
+- **More realistic multiplayer perf testing:** PIE with *Run Under One Process* off (a separate client process), plus a scalability preset for lower-end GPUs (hardware RT off, Lumen at lower quality).
+- **The next area:** turn one end cap into a narrow passage or collapsed slot canyon leading to the next level section. The builder already supports moving the ends.
+
+---
 # Milestone 1 – "The Spirit Path" greybox
 
 ## What was built

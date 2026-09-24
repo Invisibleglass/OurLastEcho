@@ -12,6 +12,13 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 - **Networking:** listen server. Server-authoritative gameplay state is in replicated flags (`bActivated`, `bRaised`, `AEchoGameState::bMilestoneComplete`); cosmetic motion (the bridge rising) is animated locally from the flag. `AEchoGameMode` gives the first controller Bat and all later ones Saraa.
 - Placeable actors (`AEchoSpiritPlatform`, `AEchoSpiritSwitch`, `AEchoRisingBridge`, `AEchoEndZone`, `AEchoRespawnVolume`) use engine BasicShapes meshes and **soft-path default materials** under `/Game/Echo/Materials/`. Their sizes are `...Size` properties (in cm) applied in `OnConstruction`, and the actor origin is the walking surface.
 
+## The canyon (Milestone 2)
+
+- `Lvl_SpiritPath` is wrapped in a canyon: a `CanyonFloor` landscape, terraced cube strata walls, PCG rocks, an overlook shelf with a ramp, boundaries, a kill volume and warm lighting. The layout lives in the functions at the top of `Scripts/build_canyon.py`. The ravine under the Spirit Path gap spans the whole canyon on purpose, so the pit can't be walked around.
+- `AEchoBoundaryVolume`: an invisible box that blocks **only** `Pawn` + `SpiritPawn` (cameras and traces pass through). Use it for player boundaries.
+- `UEchoEditorLibrary::CreateLandscapeFromHeights` (editor-only; Python name `unreal.EchoEditorLibrary.create_landscape_from_heights`): Python can't create landscapes otherwise.
+- Rocks: `/Game/Echo/PCG/PCG_CanyonRocks` on the `CanyonRocks` PCG volume, **generate on demand only** (saved in the level; never regenerates at runtime). `EchoRockExclusion`-tagged boxes keep rocks off paths.
+- Canyon pieces are tagged `CanyonBuilder`; rock setup is tagged `CanyonRocksBuilder`. Milestone 1 actors stay `EchoBuilder`, but `build_canyon.py` retunes the Milestone 1 Sun, sky and fog.
 ## Engine & toolchain
 
 - **Unreal Engine 5.8.3**, installed at `D:\UE_5.8`. It's a registered (non-launcher) build: the `.uproject`'s `EngineAssociation` is a GUID that maps to that path via `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`.
@@ -44,19 +51,33 @@ The user can also run them from inside the open editor (Output Log → switch th
 Project scripts:
 - `Scripts/build_spirit_path.py`: builds the Milestone 1 materials, `BP_Saraa`, `BP_EchoGameMode` and `Lvl_SpiritPath`. Re-running it deletes and respawns every actor tagged `EchoBuilder`. **Once the user starts hand-tuning the level, don't re-run it unprompted** (it resets their edits). Only re-run it for structural changes, and say so when you do.
 - `Scripts/verify_spirit_path.py`: read-only dump of the generated assets and level actors.
-- `Scripts/run_spirit_path_test.ps1` (runs `test_spirit_path.py`): the **end-to-end test**. It launches a headless game (`-game -nullrhi`), summons a `BP_Saraa`, and uses `py` via `-ExecCmds` to sweep both characters around the level, checking collision, switch, bridge, respawn and end zone. Run it after gameplay changes: `powershell -File Scripts/run_spirit_path_test.ps1`. The last line is PASS/FAIL.
+- `Scripts/build_canyon.py` then `Scripts/build_canyon_rocks.py`: the Milestone 2 canyon and its PCG rocks. **Open editor only.** Landscape edit layers merge on the GPU, and headless runs have no RHI. Same re-run caution as above.
+- `Scripts/test_pie_live.py` (Milestone 1, 29 checks) and `Scripts/test_canyon_live.py` (canyon, 34 checks): **live 2-player PIE tests**, run inside the editor while PIE runs. Use a fresh PIE session for each. They move characters on the server world and check the client world. `Scripts/dump_level.py` is a read-only actor dump; `Scripts/measure_fps.py` reports frame rate.
+- `Scripts/run_spirit_path_test.ps1` (runs `test_spirit_path.py`): the older headless **end-to-end test**. It launches a headless game (`-game -nullrhi`), summons a `BP_Saraa`, and uses `py` via `-ExecCmds` to sweep both characters around the level, checking collision, switch, bridge, respawn and end zone. Run it after gameplay changes: `powershell -File Scripts/run_spirit_path_test.ps1`. The last line is PASS/FAIL.
 
 Headless scripting gotchas learned the hard way:
 - Pass `-script=` paths with **forward slashes**. In `Scripts\test...` the engine reads `\t` as a tab character.
 - The commandlet's editor world has **no collision** (traces hit nothing), and `PostInitializeComponents` doesn't run for actors spawned there. So anything that tests physics or realm collision must run in a real game world (`UnrealEditor.exe ... -game -nullrhi -ExecCmds="py <path-without-spaces>"`). In a game world, Python can't spawn actors; use the `summon` cheat (`EnableCheats` first). Use `unreal.register_slate_post_tick_callback` to wait for things over time, and call `quit` yourself at the end.
 - Python names drop the `b` prefix on bools (`bActivated` → `activated`); custom channels appear as `unreal.CollisionChannel.ECC_SPIRIT_PAWN`; `K2_SetActorLocation` is `set_actor_location`.
+- Some properties aren't reachable from Python (e.g. `UShapeComponent::bDrawOnlyIfSelected`): set them in C++ or through MCP `ObjectTools`. Engine typos carry over: `SkyAtmosphereComponent.aerial_pespective_view_distance_scale`. An ISM's mesh is `get_editor_property("static_mesh")`. During PIE, `EditorActorSubsystem.get_all_level_actors()` doesn't return the editor level's actors, so stop PIE first.
+- **PCG Static Mesh Spawner instances default to `NoCollision`.** Set the descriptor's `body_instance` profile (`BlockAll` blocks both realms) or players walk through the meshes.
+- Chains of pieces along a curve must be sized from the curve they sit on, not the centreline spacing, or gaps open on the outside of bends (see `face_chord` in `build_canyon.py`). The canyon test sweeps every 5 m to catch this.
 
 ## Unreal MCP (editor open)
 
 The engine's experimental **Unreal MCP** plugin (`ModelContextProtocol` + `AllToolsets`) is enabled. `.mcp.json` points Claude Code at `http://127.0.0.1:8000/mcp`. The server only exists while the editor is open with **Editor Preferences → General → Model Context Protocol → Auto Start Server** on, or after running the console command `ModelContextProtocol.StartServer`. `tools/list` returns only meta-tools (`list_toolsets`, `describe_toolset`, `call_tool`), so discover the actual tools through those. `call_tool` takes the **short** tool name plus the toolset, e.g. `tool_name: "find_actors"`, `toolset_name: "editor_toolset.toolsets.scene.SceneTools"`. The fully-qualified name that `describe_toolset` prints is rejected as unknown.
-- **Editor open + MCP connected:** prefer MCP for editor work (placing/inspecting actors, Live Coding via `LiveCodingToolset`) so the user's open, hand-edited level isn't overwritten.
-- **Editor closed:** use `Build.bat` and the headless Python scripts below. Never run headless builds or scripts while the editor is open.
+- **Editor open + MCP connected:** prefer MCP for editor work, so the user's open, hand-edited level isn't overwritten.
+- **Editor closed:** use `Build.bat` and the headless Python scripts above. Never run headless builds or scripts while the editor is open.
+- **Launch the editor** with `D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe "<project>.uproject"`. Double-clicking the `.uproject` can open the Epic Games Launcher instead.
 
+MCP working notes (learned in Milestone 2):
+- **Running Python in the open editor:** MCP has no Python tool. Use `SlateInspectorToolset`: `Snapshot` to find the status-bar console textbox next to the `Cmd` label (ref `tb2` so far, but refs can change after a restart), `Click` it, then `Type` with `submit: true` the text `py exec(open(r'<path with spaces is fine>').read())`. Output goes to `Saved/Logs/OurLastEcho.log`; wait for it with a Bash until-loop on the marker. The same box runs any console command (`LiveCoding.Compile` for a Live Coding build, `rhi.DumpMemory`, cvars).
+- `editor_toolset.toolsets.programmatic.ProgrammaticToolset.execute_tool_script` batches many MCP calls in one round trip. It only has sandboxed Python (json/re/math/time), not the `unreal` module.
+- Useful toolsets: `EditorAppToolset` (`StartPIE`/`StopPIE`/`IsPIERunning`, `CaptureViewport`, `SearchCVars`), `SceneTools`, `ObjectTools` (can set properties Python can't reach, e.g. `bThrottleCPUWhenNotForeground` on `/Script/UnrealEd.Default__EditorPerformanceSettings`), and `PCGToolset` (build graphs node by node, `ExecuteGraphInstance`, `GetNodeDataView` for point counts; attribute selectors are plain strings like `.Z`).
+- Screenshots (`CaptureViewport`, `SlateInspectorToolset.Screenshot`) come back as megabytes of base64 that get dumped to a tool-results file. Decode that file to a JPEG and `Read` it.
+- **Don't quit the editor through MCP** (`QUIT_EDITOR`): the pending MCP call keeps the editor stuck in "Preparing to exit". Ask the user, or make sure everything is saved and end the process.
+- While the editor is open you can still compile-check C++ by building the **Game** target (`Build.bat OurLastEcho Win64 Development ...`). It doesn't touch the editor DLL.
+- A background editor on this machine runs at about 7–8 fps whatever the level does, so frame-rate numbers need the editor focused.
 ## C++ vs Blueprint split (important)
 
 `.uasset` (Blueprints, widgets, materials, etc.) and `.umap` (levels) are **binary**, so Claude can't read or edit them directly. Therefore:
@@ -70,10 +91,11 @@ The engine's experimental **Unreal MCP** plugin (`ModelContextProtocol` + `AllTo
 ## Content & config
 
 - Default game/editor map: **`/Game/Echo/Maps/Lvl_SpiritPath`** (game mode `BP_EchoGameMode` via its World Settings override). The project-wide default game mode is still the template's `BP_ThirdPersonGameMode`.
-- Game content lives under `/Game/Echo/` (Blueprints, Materials, Maps). Greybox geometry uses `/Engine/BasicShapes/Cube` + `/Game/LevelPrototyping/Materials/MI_PrototypeGrid_Gray`.
+- Game content lives under `/Game/Echo/` (Blueprints, Materials, Maps, PCG). Greybox geometry uses `/Engine/BasicShapes/Cube` + `/Game/LevelPrototyping/Materials/MI_PrototypeGrid_Gray`.
 - PIE defaults to **2 players, Play As Listen Server** (`Config/DefaultEditorPerProjectUserSettings.ini`, also set in the user's own `Saved/` copy).
 - Template levels: `ThirdPerson/Lvl_ThirdPerson` and the `Variant_*` levels. These use World Partition / One File Per Actor (`Content/__ExternalActors__`); `Lvl_SpiritPath` does not.
-- Enabled plugins: StateTree, GameplayStateTree (used by the template AI), ModelingToolsEditorMode, PythonScriptPlugin, EditorScriptingUtilities.
+- Enabled plugins: StateTree, GameplayStateTree (used by the template AI), ModelingToolsEditorMode, PythonScriptPlugin, EditorScriptingUtilities, PCG, ModelContextProtocol, AllToolsets. There's no Starter Content in this engine install; use engine BasicShapes and `/Game/LevelPrototyping` meshes.
+- `Config/DefaultEngine.ini` `[SystemSettingsEditor]` halves Lumen's surface cache atlas **in the editor only**. 2-player PIE renders two worlds on one 6 GB GPU and ran out of video memory otherwise.
 
 ## Git
 
