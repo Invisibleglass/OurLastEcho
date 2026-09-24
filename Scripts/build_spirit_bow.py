@@ -163,10 +163,15 @@ def main():
 
     outline = build_outline_material()
     glow = eal.load_asset(f"{MAT_DIR}/M_EchoGlow")   # from build_spirit_path.py
-    build_instance("MI_EchoOutline", outline, {"Color": unreal.LinearColor(1.0, 0.72, 0.28, 1.0)}, {"Glow": 2.5, "Flicker": 1.0, "Opacity": 0.55})
-    build_instance("MI_ArrowTrail", outline, {"Color": unreal.LinearColor(1.0, 0.8, 0.45, 1.0)}, {"Glow": 6.0, "Flicker": 0.0, "Opacity": 0.7})
-    build_instance("MI_Arrow", glow, {"Color": unreal.LinearColor(1.0, 0.86, 0.55, 1.0)}, {"Glow": 8.0})
-    build_instance("MI_Bow", glow, {"Color": unreal.LinearColor(0.32, 0.18, 0.08, 1.0)}, {"Glow": 0.25})
+    # Saturated amber at modest glow: paler or brighter values tonemap to cream-white in the canyon's exposure
+    build_instance("MI_EchoOutline", outline, {"Color": unreal.LinearColor(1.0, 0.33, 0.03, 1.0)}, {"Glow": 1.4, "Flicker": 1.0, "Opacity": 0.6})
+    build_instance("MI_ArrowTrail", outline, {"Color": unreal.LinearColor(1.0, 0.55, 0.15, 1.0)}, {"Glow": 5.0, "Flicker": 0.0, "Opacity": 0.7})
+    build_instance("MI_Arrow", glow, {"Color": unreal.LinearColor(1.0, 0.6, 0.2, 1.0)}, {"Glow": 5.0})
+    # Linear colour, so dark wood needs small values: (0.32, 0.18, 0.08) looked pale tan-white in the canyon sun
+    build_instance("MI_Bow", glow, {"Color": unreal.LinearColor(0.05, 0.02, 0.008, 1.0)}, {"Glow": 0.3})
+    # Saraa's spirit blue, shared with the Milestone 1 spirit platforms (build_spirit_path.py uses the same value):
+    # Glow 4 (and even a pale blue at 1.5) blew out to white under the canyon's auto-exposure; a deep blue at 0.8 stays blue
+    build_instance("MI_SpiritPlatform", glow, {"Color": unreal.LinearColor(0.02, 0.18, 1.0, 1.0)}, {"Glow": 0.8})
     log("done")
 
 

@@ -170,7 +170,7 @@ def main():
     # Materials
     glow = build_glow_material()
     ghost = build_ghost_material()
-    build_instance("MI_SpiritPlatform", glow, {"Color": unreal.LinearColor(0.15, 0.5, 1.0, 1.0)}, {"Glow": 4.0})
+    build_instance("MI_SpiritPlatform", glow, {"Color": unreal.LinearColor(0.02, 0.18, 1.0, 1.0)}, {"Glow": 0.8})   # brighter/paler washed out to white in the Milestone 2 canyon light
     build_instance("MI_Switch", glow, {"Color": unreal.LinearColor(1.0, 0.7, 0.1, 1.0)}, {"Glow": 2.0})
     build_instance("MI_EndZone", glow, {"Color": unreal.LinearColor(0.2, 1.0, 0.35, 1.0)}, {"Glow": 1.5})
     grid = eal.load_asset("/Game/LevelPrototyping/Materials/MI_PrototypeGrid_Gray")

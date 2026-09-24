@@ -49,9 +49,6 @@ namespace
 		{ TEXT("/Engine/BasicShapes/Sphere.Sphere"),     FVector(-11.0f, 0.0f, -58.0f), FRotator::ZeroRotator,       FVector(0.05f, 0.05f, 0.05f) },     // lower tip
 	};
 
-	/** Where the bow sits on each socket (tuned by eye on the UE5 mannequin) */
-	const FTransform BackPlacement(FRotator(0.0f, 90.0f, 35.0f), FVector(0.0f, -22.0f, 0.0f));
-	const FTransform HandPlacement(FRotator(0.0f, 0.0f, 90.0f), FVector(0.0f, 0.0f, 0.0f));
 }
 
 UEchoSpiritBowComponent::UEchoSpiritBowComponent()
@@ -107,7 +104,7 @@ void UEchoSpiritBowComponent::BuildBowMesh()
 	AOurLastEchoCharacter* Character = GetCharacter();
 
 	BowRoot = NewObject<USceneComponent>(Character, TEXT("SpiritBowRoot"));
-	BowRoot->SetupAttachment(Character->GetMesh(), BackSocket);
+	BowRoot->SetupAttachment(Character->GetRootComponent());
 	BowRoot->RegisterComponent();
 
 	UMaterialInterface* Material = BowMaterial.LoadSynchronous();
@@ -221,9 +218,7 @@ void UEchoSpiritBowComponent::ApplyAimState()
 
 	if (BowRoot)
 	{
-		const bool bInHand = bAiming;
-		BowRoot->AttachToComponent(Character->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, bInHand ? HandSocket : BackSocket);
-		BowRoot->SetRelativeTransform(bInHand ? HandPlacement : BackPlacement);
+		BowRoot->SetRelativeTransform(bAiming ? AimPlacement : BackPlacement);
 	}
 }
 

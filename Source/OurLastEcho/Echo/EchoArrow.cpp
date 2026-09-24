@@ -68,7 +68,7 @@ AEchoArrow::AEchoArrow()
 	Glow = CreateDefaultSubobject<UPointLightComponent>(TEXT("Glow"));
 	Glow->SetupAttachment(Collision);
 	Glow->SetIntensityUnits(ELightUnits::Candelas);
-	Glow->SetIntensity(30.0f);
+	Glow->SetIntensity(8.0f);
 	Glow->SetAttenuationRadius(450.0f);
 	Glow->SetLightColor(FLinearColor(1.0f, 0.78f, 0.4f));
 	Glow->SetCastShadows(false);

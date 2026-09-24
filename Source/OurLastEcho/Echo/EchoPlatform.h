@@ -66,10 +66,10 @@ public:
 
 	/** Outline glow while dormant (flickering) and while awake (steady, fainter) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Echo Platform|Look")
-	float DormantOutlineGlow = 2.5f;
+	float DormantOutlineGlow = 1.6f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Echo Platform|Look")
-	float AwakeOutlineGlow = 1.0f;
+	float AwakeOutlineGlow = 0.6f;
 
 	/** Outline bar thickness in cm */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Echo Platform|Look")
@@ -111,6 +111,9 @@ protected:
 	TObjectPtr<UMaterialInstanceDynamic> OutlineMID;
 
 	FTimerHandle SleepTimer;
+
+	/** The slab material's own Glow, which the wake-up flash starts from and settles back to */
+	float SlabRestingGlow = 1.5f;
 	float FlashRemaining = 0.0f;
 	bool bLocalAwakeApplied = false;
 

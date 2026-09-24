@@ -99,12 +99,13 @@ public:
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
 	TSoftObjectPtr<UMaterialInterface> BowMaterial;
 
-	/** Bone the bow hangs from when not aiming, and the hand it moves to when aiming */
+	/** Where the bow sits relative to the character (capsule centre) when not aiming: slung across the back */
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
-	FName BackSocket = TEXT("spine_05");
+	FTransform BackPlacement = FTransform(FRotator(0.0f, 180.0f, 35.0f), FVector(-24.0f, 0.0f, 38.0f));
 
+	/** ...and while aiming: held upright in front of the chest (the template has no aim animation to raise an arm) */
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
-	FName HandSocket = TEXT("hand_l");
+	FTransform AimPlacement = FTransform(FRotator(0.0f, 0.0f, 0.0f), FVector(42.0f, -8.0f, 40.0f));
 
 public:
 

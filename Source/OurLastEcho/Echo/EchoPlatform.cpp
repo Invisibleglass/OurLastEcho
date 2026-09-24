@@ -26,10 +26,9 @@ namespace
 	const FName GlowParam(TEXT("Glow"));
 	const FName FlickerParam(TEXT("Flicker"));
 
-	/** Base glow of MI_SpiritPlatform, and how much brighter the wake-up flash starts */
-	constexpr float SlabBaseGlow = 4.0f;
-	constexpr float SlabFlashGlow = 40.0f;
-	constexpr float OutlineFlashGlow = 25.0f;
+	/** How much brighter than resting the wake-up flash starts */
+	constexpr float SlabFlashMultiplier = 10.0f;
+	constexpr float OutlineFlashGlow = 12.0f;
 	constexpr float FlashLightCandelas = 400.0f;
 }
 
@@ -147,6 +146,10 @@ void AEchoPlatform::BeginPlay()
 	Super::BeginPlay();
 
 	SlabMID = Slab->CreateDynamicMaterialInstance(0);
+	if (SlabMID)
+	{
+		SlabMID->GetScalarParameterValue(GlowParam, SlabRestingGlow);
+	}
 	if (UMaterialInterface* Material = OutlineMaterial.Get())
 	{
 		OutlineMID = UMaterialInstanceDynamic::Create(Material, this);
@@ -289,7 +292,7 @@ void AEchoPlatform::Tick(float DeltaSeconds)
 		FlashLight->SetVisibility(Alpha > 0.0f);
 		if (SlabMID)
 		{
-			SlabMID->SetScalarParameterValue(GlowParam, FMath::Lerp(SlabBaseGlow, SlabFlashGlow, Alpha));
+			SlabMID->SetScalarParameterValue(GlowParam, FMath::Lerp(SlabRestingGlow, SlabRestingGlow * SlabFlashMultiplier, Alpha));
 		}
 		if (OutlineMID)
 		{
