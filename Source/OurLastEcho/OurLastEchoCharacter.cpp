@@ -46,8 +46,52 @@ AOurLastEchoCharacter::AOurLastEchoCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
+	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+}
+
+void AOurLastEchoCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (Realm == EEchoRealm::Spirit)
+	{
+		// Spirit capsules use their own object channel so spirit platforms can block them and nothing else.
+		// This runs identically on server and clients, so movement prediction stays in agreement.
+		UCapsuleComponent* Capsule = GetCapsuleComponent();
+		Capsule->SetCollisionObjectType(ECC_SpiritPawn);
+
+		// Saraa exists in the past: she and Bat pass through each other
+		Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	}
+}
+
+void AOurLastEchoCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	RespawnTransform = GetActorTransform();
+
+	if (GhostMaterial)
+	{
+		USkeletalMeshComponent* MeshComp = GetMesh();
+		for (int32 Index = 0; Index < MeshComp->GetNumMaterials(); ++Index)
+		{
+			MeshComp->SetMaterial(Index, GhostMaterial);
+		}
+		MeshComp->SetCastShadow(false);
+	}
+}
+
+void AOurLastEchoCharacter::RespawnAtStart()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GetCharacterMovement()->StopMovementImmediately();
+	TeleportTo(RespawnTransform.GetLocation(), RespawnTransform.Rotator(), false, true);
 }
 
 void AOurLastEchoCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

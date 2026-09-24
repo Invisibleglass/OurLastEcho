@@ -5,11 +5,13 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
+#include "EchoTypes.h"
 #include "OurLastEchoCharacter.generated.h"
 
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UMaterialInterface;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -49,10 +51,36 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MouseLookAction;
 
+	/** Which realm this character lives in. Set per Blueprint: BP_ThirdPersonCharacter = Living (Bat), BP_Saraa = Spirit */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Echo")
+	EEchoRealm Realm = EEchoRealm::Living;
+
+	/** If set, replaces every material slot on the mesh (Saraa's ghost look) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Echo")
+	TObjectPtr<UMaterialInterface> GhostMaterial;
+
+	/** Where this character spawned; used by RespawnAtStart (server only) */
+	FTransform RespawnTransform;
+
 public:
 
 	/** Constructor */
-	AOurLastEchoCharacter();	
+	AOurLastEchoCharacter();
+
+	/** Returns which realm this character lives in */
+	UFUNCTION(BlueprintPure, Category="Echo")
+	EEchoRealm GetRealm() const { return Realm; }
+
+	/** Teleports the character back to where it spawned. Server only; movement replication corrects the client */
+	void RespawnAtStart();
+
+protected:
+
+	/** Applies realm-specific collision once components exist */
+	virtual void PostInitializeComponents() override;
+
+	/** Records the spawn point and applies the ghost material */
+	virtual void BeginPlay() override;
 
 protected:
 
