@@ -53,7 +53,7 @@ Headless scripting gotchas learned the hard way:
 
 ## Unreal MCP (editor open)
 
-The engine's experimental **Unreal MCP** plugin (`ModelContextProtocol` + `AllToolsets`) is enabled. `.mcp.json` points Claude Code at `http://127.0.0.1:8000/mcp`. The server only exists while the editor is open with **Editor Preferences → General → Model Context Protocol → Auto Start Server** on, or after running the console command `ModelContextProtocol.StartServer`. `tools/list` returns only meta-tools (`list_toolsets`, `describe_toolset`, `call_tool`), so discover the actual tools through those.
+The engine's experimental **Unreal MCP** plugin (`ModelContextProtocol` + `AllToolsets`) is enabled. `.mcp.json` points Claude Code at `http://127.0.0.1:8000/mcp`. The server only exists while the editor is open with **Editor Preferences → General → Model Context Protocol → Auto Start Server** on, or after running the console command `ModelContextProtocol.StartServer`. `tools/list` returns only meta-tools (`list_toolsets`, `describe_toolset`, `call_tool`), so discover the actual tools through those. `call_tool` takes the **short** tool name plus the toolset, e.g. `tool_name: "find_actors"`, `toolset_name: "editor_toolset.toolsets.scene.SceneTools"`. The fully-qualified name that `describe_toolset` prints is rejected as unknown.
 - **Editor open + MCP connected:** prefer MCP for editor work (placing/inspecting actors, Live Coding via `LiveCodingToolset`) so the user's open, hand-edited level isn't overwritten.
 - **Editor closed:** use `Build.bat` and the headless Python scripts below. Never run headless builds or scripts while the editor is open.
 
