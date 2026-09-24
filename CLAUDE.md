@@ -27,6 +27,12 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 - `AEchoPlatform`: dormant (gold flickering outline for Bat only, no collision) or awake (blue slab for Saraa, blocks only `SpiritPawn`). `bAwake` is replicated, plus `AwakenCount` for the cue on every machine. `bTimed`/`AwakeDuration` per instance. Visibility logic is shared with the spirit platforms in `EchoVisibility.h`, including the `EchoShowAllPlatforms` debug flag on `AEchoGameState`.
 - `AEchoCheckpoint` sets a character's respawn transform. `AEchoRisingBridge` can hinge (`bHingeAtStart` + `StartRotationOffset`) for The Climb's ramp.
 - The Climb is built by `Scripts/build_climb.py` (tag `ClimbBuilder`; it also moves the `EndZone` onto the ledge). Its layout is in wall coordinates (station `s`, `u` = cm out from the left wall), and it places platforms by **measured** distance because the curving wall stretches stations.
+## Settings / pause menu
+
+- `AOurLastEchoPlayerController` opens `/Game/Echo/UI/WBP_SettingsMenu` (parent `UEchoSettingsMenu`, BindWidget names `MasterVolumeSlider`, `MasterVolumeText`, `ResumeButton`, `QuitButton`) on `IA_Menu` (Esc / P / gamepad Start; `bTriggerWhenPaused`) or the `EchoMenu` console command. The server's `AEchoGameMode::SetPlayerInSettingsMenu` keeps the list of players in the menu (replicated on `AEchoGameState` for the HUD banner) and uses the engine's `SetPause`/`ClearPause`.
+- **While paused, the server's clock stops**, so actors whose next net update isn't due never replicate. Call `ForceNetUpdate()` on anything that has to reach clients during a pause. The world settings (which carry the pause) are already handled.
+- Volume: `UEchoAudioSettings` (per machine, `GameUserSettings.ini`, audio device `SetTransientPrimaryVolume`).
+- The widget layout is built by `Scripts/build_settings_menu_widget.mcp.py`, which runs in the MCP ProgrammaticToolset sandbox (not editor Python). The sandbox rejected a helper using `**kwargs` with "must define a callable run()", so pass dicts.
 ## Engine & toolchain
 
 - **Unreal Engine 5.8.3**, installed at `D:\UE_5.8`. It's a registered (non-launcher) build: the `.uproject`'s `EngineAssociation` is a GUID that maps to that path via `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`.

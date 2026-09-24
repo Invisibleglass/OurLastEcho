@@ -92,4 +92,6 @@ Run on branch `milestone-3-spirit-bow` straight after branching from `main`, in 
 | Earlier mechanics still work | ✅ Pass | `test_pie_live.py` 29/29 and `test_canyon_live.py` 34/34, updated for the moved end zone and the new checkpoint. The Milestone 1 end zone moved (allowed by the brief). No other Milestone 1 or 2 gameplay actor was touched. |
 | Runs smoothly with 2 players in PIE | ⚠️ Needs manual test | Same situation as Milestone 2: a background editor on this machine is throttled to about 8 fps whatever the level, so it can't be judged from here. The new actors are cheap: 7 platforms, a few arrows at a time. |
 
-**Totals:** Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60.
+| Settings menu pauses both players, volume can be turned down | ✅ Pass (logic) / ⚠️ keys and Saraa's side need a manual test | `test_menu_live.py` 17/17: both machines pause, movement and the timed countdown freeze, it stays paused until both players close their menus, both resume, the volume is saved and clamped, and the input assets are correct. The "Paused - Bat is in the settings menu" banner on Saraa's screen and the menu layout were checked in screenshots. |
+
+**Totals:** Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, settings menu 17/17.

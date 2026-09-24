@@ -6,8 +6,10 @@
 #include "GameFramework/PlayerController.h"
 #include "OurLastEchoPlayerController.generated.h"
 
+class UInputAction;
 class UInputMappingContext;
 class UUserWidget;
+class UEchoSettingsMenu;
 
 /**
  *  Basic PlayerController class for a third person game
@@ -39,6 +41,50 @@ protected:
 	/** If true, the player will use UMG touch controls even if not playing on mobile platforms */
 	UPROPERTY(EditAnywhere, Config, Category = "Input|Touch Controls")
 	bool bForceTouchControls = false;
+
+	/** Pause / settings menu layout (a Widget Blueprint based on UEchoSettingsMenu) */
+	UPROPERTY(EditAnywhere, Category="Echo|Settings Menu")
+	TSoftClassPtr<UEchoSettingsMenu> SettingsMenuClass;
+
+	/** Opens/closes the menu: Esc or P / gamepad Start (triggers while paused, so either player can open it) */
+	UPROPERTY(EditAnywhere, Category="Echo|Settings Menu")
+	TSoftObjectPtr<UInputAction> MenuAction;
+
+	UPROPERTY(EditAnywhere, Category="Echo|Settings Menu")
+	TSoftObjectPtr<UInputMappingContext> MenuMappingContext;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEchoSettingsMenu> SettingsMenu;
+
+public:
+
+	AOurLastEchoPlayerController();
+
+	/** Shows the settings menu and pauses the game for both players (local player controllers only) */
+	UFUNCTION(BlueprintCallable, Category="Echo|Settings Menu")
+	void OpenSettingsMenu();
+
+	/** Hides the menu; the game resumes once nobody has it open */
+	UFUNCTION(BlueprintCallable, Category="Echo|Settings Menu")
+	void CloseSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category="Echo|Settings Menu")
+	void ToggleSettingsMenu();
+
+	UFUNCTION(BlueprintPure, Category="Echo|Settings Menu")
+	bool IsSettingsMenuOpen() const;
+
+	/** Console command: toggles the settings menu (handy in PIE, where Esc stops the session) */
+	UFUNCTION(Exec)
+	void EchoMenu();
+
+protected:
+
+	/** Tells the server this player opened/closed the menu; it pauses while anyone has it open */
+	UFUNCTION(Server, Reliable)
+	void ServerSetInSettingsMenu(bool bOpen);
+
+	void ReportMenuState(bool bOpen);
 
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;

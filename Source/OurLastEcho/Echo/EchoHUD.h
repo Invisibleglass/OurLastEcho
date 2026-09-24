@@ -42,4 +42,7 @@ public:
 protected:
 
 	void DrawReticle();
+
+	/** While paused, tells the player who DIDN'T open the menu who did */
+	void DrawPausedBanner();
 };

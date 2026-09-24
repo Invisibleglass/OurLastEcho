@@ -8,6 +8,8 @@
 #include "EchoGameState.h"
 #include "EchoSpiritBowComponent.h"
 #include "OurLastEchoCharacter.h"
+#include "OurLastEchoPlayerController.h"
+#include "GameFramework/PlayerState.h"
 
 void AEchoHUD::DrawHUD()
 {
@@ -25,6 +27,8 @@ void AEchoHUD::DrawHUD()
 	{
 		return;
 	}
+
+	DrawPausedBanner();
 
 	if (GameState->IsDebugShowAllPlatforms())
 	{
@@ -48,6 +52,36 @@ void AEchoHUD::DrawHUD()
 
 	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f), X - 40.0f, Y - 20.0f, TextWidth + 80.0f, TextHeight + 40.0f);
 	DrawText(Message, FLinearColor::White, X, Y, Font, TextScale);
+}
+
+void AEchoHUD::DrawPausedBanner()
+{
+	const AEchoGameState* GameState = GetWorld()->GetGameState<AEchoGameState>();
+	const AOurLastEchoPlayerController* PC = Cast<AOurLastEchoPlayerController>(PlayerOwner);
+	if (!GameState || !GetWorld()->IsPaused() || (PC && PC->IsSettingsMenuOpen()))
+	{
+		return;
+	}
+
+	// "Bat" / "Saraa" from each menu player's character
+	TArray<FString> Names;
+	for (const APlayerState* Player : GameState->GetPlayersInSettingsMenu())
+	{
+		const AOurLastEchoCharacter* Character = Player ? Cast<AOurLastEchoCharacter>(Player->GetPawn()) : nullptr;
+		Names.Add(Character ? (Character->GetRealm() == EEchoRealm::Living ? TEXT("Bat") : TEXT("Saraa")) : TEXT("The other player"));
+	}
+	const FString Who = Names.Num() > 0 ? FString::Join(Names, TEXT(" and ")) : TEXT("The other player");
+	const FString Message = FString::Printf(TEXT("Paused - %s %s the settings menu"), *Who, Names.Num() > 1 ? TEXT("are in") : TEXT("is in"));
+
+	UFont* Font = GEngine->GetLargeFont();
+	float TextWidth = 0.0f;
+	float TextHeight = 0.0f;
+	GetTextSize(Message, TextWidth, TextHeight, Font, 1.5f);
+	const float X = (Canvas->ClipX - TextWidth) * 0.5f;
+	const float Y = Canvas->ClipY * 0.5f - TextHeight * 0.5f;
+
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
+	DrawText(Message, FLinearColor::White, X, Y, Font, 1.5f);
 }
 
 void AEchoHUD::DrawReticle()

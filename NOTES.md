@@ -36,6 +36,16 @@ Branch: `milestone-3-spirit-bow`, branched from `main` after Milestone 2 was mer
 
 **Debug:** type **`EchoShowAllPlatforms`** in the console (backtick key) to toggle every spirit and echo platform visible to both players. It's replicated through the game state, and a line on screen says it's on.
 
+**Settings / pause menu** (added after the milestone, before merging):
+- **Opening it:** **Esc**, **P** or **gamepad Start** (in PIE Esc stops the session, so use **P**). The console command `EchoMenu` also toggles it.
+- **Pausing:** opening it pauses the game for **both** players. The other player's screen dims with "Paused - Bat is in the settings menu". Either player can open theirs while paused, and the game only resumes once everyone who opened it has closed it (Resume button, the same key, or gamepad B).
+- **Volume:** a **sound volume** slider. Each player's volume is their own, applied to their machine's audio device and saved in `GameUserSettings.ini`.
+- **Quit game** button.
+- **How it's built:**
+  - Logic in C++: `AOurLastEchoPlayerController`, `AEchoGameMode` (pause bookkeeping, using the engine's own pause, which replicates), `UEchoSettingsMenu` and `UEchoAudioSettings`.
+  - Layout: `/Game/Echo/UI/WBP_SettingsMenu`, built with the MCP UMG toolset by `Scripts/build_settings_menu_widget.mcp.py`. Restyle it freely, but keep the widget names `MasterVolumeSlider`, `MasterVolumeText`, `ResumeButton` and `QuitButton`.
+  - Input: `IA_Menu` (triggers while paused) and `IMC_Menu`, from `Scripts/build_settings_menu.py`.
+- **One bug found while building it:** the other player's world didn't pause. While paused, the server's clock stops, so the world settings (which carry the pause) never came due for a network update. They're now pushed out immediately on every pause and resume.
 ## How to test
 
 **Just play:** press Play (2 players, Listen Server). Cross the Spirit Path as before, then turn left at the far side:
@@ -63,11 +73,12 @@ That's 60 `ECHO_CLIMB_TEST` checks, ending in `PASS`/`FAIL`, and it takes about 
 2. **A 59 cm step at the top of the ramp,** too high to walk up (the maximum is 45 cm). The ledge is a straight block on a curving wall, so its edge sat about 1 m past the ramp's hinge. The hinge is now placed on the block's actual face.
 3. **Colours washed out:** the bow looked white, the outline cream and the spirit platforms white. Linear colours are brighter than they look, and the canyon's auto-exposure clips glow. All were retuned. The Milestone 1 spirit platforms share the blue material and now read blue too.
 
+**Menu test:** `Scripts/test_menu_live.py` (fresh 2-player PIE) passes, 17/17. It checks that opening pauses both machines, that movement and a timed platform's countdown freeze, that the game stays paused until both players close their menus, that both resume, and that the volume is saved and clamped.
 ## Known issues
 
 - **Needs a manual check: real controls and feel.** The input assets and bindings are verified, and every aim and fire path is tested by calling it directly, but nobody has pressed a real mouse button or trigger yet. Also worth checking: jump spacing, the timed platform's 7 s, and camera feel.
 - **Needs a manual check: `EchoShowAllPlatforms` typed on Saraa's machine.** Typed on Bat's side it works end to end. From Saraa's side it's a standard server RPC on her own character, but Python can't test that: editor Python makes every call run locally. The engine confirms this: `AActor::GetFunctionCallspace` returns local while `GAllowActorScriptExecutionInEditor` is set. Press the backtick key in Saraa's window and type it once to confirm.
-- **Frame rate** still can't be measured with the editor in the background (see Milestone 2). Please check `stat fps` with the editor focused.
+- **Needs a manual check: the menu from real keys and on Saraa's side.** Pressing P/Esc/Start, dragging the slider and hearing the change haven't been done by a person. Saraa opening the menu goes through a server RPC, which editor Python can't exercise. Her side of the pause logic is tested on the server.- **Frame rate** still can't be measured with the editor in the background (see Milestone 2). Please check `stat fps` with the editor focused.
 - **Aim slowdown isn't part of character movement's saved moves.** A remote Bat could see small corrections when he starts or stops aiming. Bat is always the listen-server host, so it doesn't happen in practice.
 - **Placeholder sounds** come from the engine's VR editor content (`/Engine/VREditor/Sounds/...`), assigned as soft references on the arrow and the platform. Swap them for real audio later.
 - **The aim trace stops on Saraa** (pawns block the arrow channel for traces), but the arrow itself flies through her. It's minor: aiming at her puts the arc's endpoint on her.

@@ -21,7 +21,7 @@ public class OurLastEcho : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "Landscape" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Landscape", "SlateCore" });
 
 		// Editor-only builder helpers (EchoEditorLibrary)
 		if (Target.bBuildEditor)
