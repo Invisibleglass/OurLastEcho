@@ -51,6 +51,12 @@ Headless scripting gotchas learned the hard way:
 - The commandlet's editor world has **no collision** (traces hit nothing), and `PostInitializeComponents` doesn't run for actors spawned there. So anything that tests physics or realm collision must run in a real game world (`UnrealEditor.exe ... -game -nullrhi -ExecCmds="py <path-without-spaces>"`). In a game world, Python can't spawn actors; use the `summon` cheat (`EnableCheats` first). Use `unreal.register_slate_post_tick_callback` to wait for things over time, and call `quit` yourself at the end.
 - Python names drop the `b` prefix on bools (`bActivated` → `activated`); custom channels appear as `unreal.CollisionChannel.ECC_SPIRIT_PAWN`; `K2_SetActorLocation` is `set_actor_location`.
 
+## Unreal MCP (editor open)
+
+The engine's experimental **Unreal MCP** plugin (`ModelContextProtocol` + `AllToolsets`) is enabled. `.mcp.json` points Claude Code at `http://127.0.0.1:8000/mcp`. The server only exists while the editor is open with **Editor Preferences → General → Model Context Protocol → Auto Start Server** on, or after running the console command `ModelContextProtocol.StartServer`. `tools/list` returns only meta-tools (`list_toolsets`, `describe_toolset`, `call_tool`), so discover the actual tools through those.
+- **Editor open + MCP connected:** prefer MCP for editor work (placing/inspecting actors, Live Coding via `LiveCodingToolset`) so the user's open, hand-edited level isn't overwritten.
+- **Editor closed:** use `Build.bat` and the headless Python scripts below. Never run headless builds or scripts while the editor is open.
+
 ## C++ vs Blueprint split (important)
 
 `.uasset` (Blueprints, widgets, materials, etc.) and `.umap` (levels) are **binary**, so Claude can't read or edit them directly. Therefore:
