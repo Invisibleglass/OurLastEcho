@@ -35,6 +35,8 @@ CANYON_MAX = (20300, 12700, 4000)
 EXCLUSIONS = [
     ("RockExclusion_SpiritPath", (-2300, -1300, -2000), (4400, 1300, 2000)),
     ("RockExclusion_OverlookRamp", (2800, 1300, -500), (7600, 3000, 2000)),
+    # Milestone 3's The Climb (build_climb.py): the platforms, the gap behind the screen and the ramp's foot
+    ("RockExclusion_Climb", (3400, -3300, -500), (8800, 800, 2500)),
 ]
 
 # (mesh, weight)

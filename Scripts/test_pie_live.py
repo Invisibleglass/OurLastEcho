@@ -130,9 +130,11 @@ def step_after_raise():
     check(drop(bat, 800, 300, 0), "Bat lands on the risen bridge")
     check(not any(platforms_visible(server)), "spirit platforms still hidden on Bat's machine")
 
-    drop(bat, 3100, -150, 0)
+    # The end zone moved to the top of The Climb in Milestone 3, so drop onto wherever it is
+    zone = first(server, unreal.EchoEndZone).get_actor_location()
+    drop(bat, zone.x - 150, zone.y, zone.z)
     check(not gs.get_game_state(server).is_milestone_complete(), "Bat alone in the end zone does not complete")
-    drop(S["saraa"], 3100, 150, 0)
+    drop(S["saraa"], zone.x + 150, zone.y, zone.z)
     check(gs.get_game_state(server).is_milestone_complete(), "Bat + Saraa in the end zone completes (server)")
 
 

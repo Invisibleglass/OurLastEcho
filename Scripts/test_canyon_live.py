@@ -145,8 +145,10 @@ def step_kill_volume_drop():
 def step_kill_volume_check():
     for who in ("Bat", "Saraa"):
         loc = S[who].get_actor_location()
-        check(loc.x < -1000 and abs(loc.y) < 400 and loc.z > 0,
-              f"{who:5} fell below the canyon floor far from the Spirit Path and respawned at the start ({loc.x:.0f}, {loc.y:.0f}, {loc.z:.0f})")
+        # Their respawn point: the start, or the last checkpoint they passed (Milestone 3's climb base)
+        want = S[who].get_respawn_transform().translation
+        check((loc - want).length() < 150 and loc.z > 0,
+              f"{who:5} fell below the canyon floor far away and respawned at their respawn point ({loc.x:.0f}, {loc.y:.0f}, {loc.z:.0f})")
 
 
 def collect_rocks(world):

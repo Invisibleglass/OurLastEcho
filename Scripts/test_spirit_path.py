@@ -1,4 +1,4 @@
-﻿"""
+"""
 End-to-end test for Milestone 1, run inside a real (headless) GAME world. The editor world has no
 collision in a commandlet, and Saraa's SpiritPawn collision is only applied when gameplay starts.
 
@@ -76,9 +76,11 @@ def run_delayed_steps():
     check(drop(bat, 800, 300, 0), "Bat lands on the risen bridge")
 
     game_state = gs.get_game_state(world)
-    drop(bat, 3100, -150, 0)
+    # The end zone moved to the top of The Climb in Milestone 3, so drop onto wherever it is
+    zone = first_of(unreal.EchoEndZone).get_actor_location()
+    drop(bat, zone.x - 150, zone.y, zone.z)
     check(not game_state.is_milestone_complete(), "Bat alone in the end zone does not complete the milestone")
-    drop(saraa, 3100, 150, 0)
+    drop(saraa, zone.x + 150, zone.y, zone.z)
     check(game_state.is_milestone_complete(), "Bat + Saraa in the end zone completes the milestone")
 
 

@@ -126,6 +126,7 @@ void AOurLastEchoCharacter::RequestShowAllPlatforms(bool bShow)
 
 void AOurLastEchoCharacter::ServerSetShowAllPlatforms_Implementation(bool bShow)
 {
+	UE_LOG(LogOurLastEcho, Log, TEXT("%s asked to turn show-all-platforms %s"), *GetName(), bShow ? TEXT("on") : TEXT("off"));
 	if (AEchoGameState* GameState = GetWorld()->GetGameState<AEchoGameState>())
 	{
 		GameState->SetDebugShowAllPlatforms(bShow);
