@@ -59,3 +59,37 @@ The canyon was built around the Spirit Path afterwards (see NOTES.md), so the te
 | `test_canyon_live.py` (new) | ✅ Pass, 34/34 | Both realms: floor, overlook, ramp and rocks are solid; walls hold every 5 m at 15 m and 90 m up; both ends hold; the canyon kill volume respawns; no rocks on the Spirit Path. |
 
 The canyon test found three Milestone 2 bugs, all **fixed** before the final run: a boundary gap on the outside of the far bend, PCG rocks with no collision, and 2-player PIE running out of video memory. Details are in NOTES.md.
+## Milestone 3: baseline before starting, then results
+
+### Baseline (start of Milestone 3, before any changes)
+
+Run on branch `milestone-3-spirit-bow` straight after branching from `main`, in fresh 2-player listen-server PIE sessions:
+
+| Test | Result |
+|---|---|
+| `test_pie_live.py` (Milestone 1 mechanics) | ✅ Pass, 29/29 |
+| `test_canyon_live.py` (Milestone 2 canyon) | ✅ Pass, 34/34 |
+
+### Milestone 3 results (end of milestone)
+
+| Item | Result | Notes |
+|---|---|---|
+| Compiles, no warnings | ✅ Pass | Editor target and Game target: `Result: Succeeded`, 0 warnings. |
+| Only Bat has the bow | ✅ Pass | `CanUseBow` is true for Bat only. Bat carries the 6-part bow mesh and Saraa has none. The server refuses a shot from Saraa's bow. |
+| Aim (camera, reticle, slow, facing) | ✅ Pass | Camera 400 → 160 cm, walk speed 500 → 220, faces the aim direction. Saraa's machine sees Bat aiming (replicated). Releasing restores everything. The reticle was checked visually. |
+| Controls: keyboard/mouse and gamepad | ⚠️ Needs manual test | `IMC_Bow` is verified to map Aim to RMB + Gamepad_LeftTrigger and Fire to LMB + Gamepad_RightTrigger, and the component binds them. No real device was pressed. |
+| Fire, cooldown, arrows seen by both | ✅ Pass | The first shot fires and an immediate second is refused. The arrow exists on both machines and is seen flying on Saraa's (40 m/s). The trail and glow were checked visually. |
+| Bat sees dormant platforms; Saraa doesn't | ✅ Pass | All 7: outline visible and slab hidden on Bat's machine, both hidden on Saraa's. |
+| Nobody stands on a dormant platform | ✅ Pass | Both characters fall through. |
+| Shot wakes a platform: solid and visible for Saraa, cue on both | ✅ Pass | Awake on both machines. Saraa sees the blue slab and lands on it. Bat still sees the outline and falls through. The wake flash and sound counter went up on **both** machines. |
+| Timed platform goes dormant again | ✅ Pass | P3 (7 s): Saraa's machine knows the time left. It went dormant on both machines, Saraa fell through it, and the permanent platforms stayed awake. |
+| The "specific spot" platform | ✅ Pass | 4 shots at P6 from the open floor in front of the rock screen were all blocked. The shot from the gap behind the screen woke it. |
+| Saraa can climb The Climb | ✅ Pass | **Real jumps** on her client (movement input + jump), P1 → P7 → ledge, every hop first try, with the server agreeing where she landed. P3 was re-shot just before she needed it. |
+| Saraa's switch lets Bat reach the end zone | ✅ Pass | The switch ignores Bat; Saraa's press lowers the ramp on both machines. Bat walks up the ramp onto the ledge (real movement input). |
+| End zone on the ledge | ✅ Pass | Not complete with Bat alone; complete with both, on both machines. |
+| Checkpoint | ✅ Pass | Saraa falling into the canyon kill volume after the climb base respawns at the base. |
+| Debug command shows all platforms | ✅ Pass (host) / ⚠️ client needs manual test | Typing `EchoShowAllPlatforms` in the editor console during PIE ran on Bat and turned it on for both machines. Bat then saw the spirit platforms and Saraa saw every dormant echo. It turns off again. Saraa's own console uses a server RPC that editor Python can't exercise, because every call runs locally during Python (`GAllowActorScriptExecutionInEditor`). Needs one manual try. |
+| Earlier mechanics still work | ✅ Pass | `test_pie_live.py` 29/29 and `test_canyon_live.py` 34/34, updated for the moved end zone and the new checkpoint. The Milestone 1 end zone moved (allowed by the brief). No other Milestone 1 or 2 gameplay actor was touched. |
+| Runs smoothly with 2 players in PIE | ⚠️ Needs manual test | Same situation as Milestone 2: a background editor on this machine is throttled to about 8 fps whatever the level, so it can't be judged from here. The new actors are cheap: 7 platforms, a few arrows at a time. |
+
+**Totals:** Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60.

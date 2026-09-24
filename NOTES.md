@@ -1,3 +1,88 @@
+# Milestone 3 – The spirit bow and echo platforms
+
+Branch: `milestone-3-spirit-bow`, branched from `main` after Milestone 2 was merged. Built with the editor open, driving it through its MCP server.
+
+**New mechanic:** Bat sees faint gold "echo platforms" that Saraa can't. When he shoots one with his spirit bow, it becomes solid and blue for her, so she can climb it.
+
+## What was built
+
+**The spirit bow** (`UEchoSpiritBowComponent`; every character has one, but only a Living-realm character can use it):
+- **Aim:** hold **right mouse / left trigger**. The camera pulls in over the shoulder (400 → 160 cm, FOV 70), a gold reticle appears, Bat faces where he aims, and he slows to 2.2 m/s.
+- **Fire:** **left mouse / right trigger** while aiming. The **server** spawns a replicated glowing arrow (`AEchoArrow`) with a point light and a tapering streak trail. It flies on a slight arc, and the launch angle is corrected for the arc so it lands where the reticle points. Unlimited arrows, 0.6 s cooldown.
+- **Saraa can't use it:** she gets no bow mesh, her input isn't bound and the server rejects her shots.
+- **Controls:** Enhanced Input assets `IA_Aim`, `IA_Fire` and `IMC_Bow`, made by `Scripts/build_spirit_bow.py`. The component adds `IMC_Bow` on top of the template's controls.
+- **Placeholder bow:** built from 6 engine shapes. It's slung across Bat's back, and held upright in front of him while aiming. The template has no aim animation; attached to his hand, the bow just dangled at his hip.
+- **Tuning** (select the **SpiritBow** component on `BP_ThirdPersonCharacter`): arrow speed, arc (gravity scale), range, cooldown, muzzle offset, aim camera distance/offset/FOV, blend speed, aim walk speed, and the bow's back and aim placements.
+- **New collision channel:** `EchoArrow` (`ECC_GameTraceChannel2`, default Block). Walls, rocks and the landscape stop arrows; characters don't.
+
+**Echo platforms** (`AEchoPlatform`):
+
+| | Bat sees | Saraa sees | Who can stand on it |
+|---|---|---|---|
+| Dormant | faint **flickering gold outline** | nothing | nobody |
+| Awake | a steady, fainter outline | a **blue** slab (her spirit style) | Saraa only |
+
+- **When an arrow hits** (a hit box that blocks only the `EchoArrow` channel): the platform wakes on the server, and both machines play a blue flash light, a material glow burst and a sound cue.
+- **Stay awake or timed:** each platform has **`bTimed`** (default off = stays awake) and **`AwakeDuration`**. A timed platform's slab blinks for Saraa in its last 2.5 s, then it goes dormant with a sound. Shooting it again restarts the timer.
+- **Networking:** the state is server-authoritative and replicated (`bAwake`, a wake counter for the cue, and the server time a timed platform expires). Visibility is decided locally per machine, like the Milestone 1 spirit platforms.
+
+**The Climb** (`Scripts/build_climb.py`, actors tagged `ClimbBuilder`), on the left canyon wall just past the bridge's far side:
+- **7 echo platforms**, 90 cm higher each (the jump apex is about 128 cm) and 4.3 m apart centre to centre. They're placed by measured distance because the wall curves.
+- **P3 is timed (7 s)**, so Bat has to wake it just before Saraa needs it.
+- **P6 and P7 are behind a tall rock screen.** From the open canyon floor, Bat's shots hit the screen. He has to walk into the gap between the screen and the wall (the "specific spot") to see and shoot them.
+- **The ledge** is 7.2 m up. Saraa's switch on it swings down a hinged ramp for Bat (`AEchoRisingBridge` can now hinge and swing, not just rise). **The end zone moved onto the ledge**, so both players finish there together.
+- **A checkpoint** (`AEchoCheckpoint`) at the base: after reaching it, falling into any kill volume respawns you there. A fall from the platforms lands at the base anyway. Platforms stay awake, except the timed one.
+- **The rock scatter** has an extra exclusion zone, so no boulders sit in the climb.
+
+**Debug:** type **`EchoShowAllPlatforms`** in the console (backtick key) to toggle every spirit and echo platform visible to both players. It's replicated through the game state, and a line on screen says it's on.
+
+## How to test
+
+**Just play:** press Play (2 players, Listen Server). Cross the Spirit Path as before, then turn left at the far side:
+1. As **Bat**, hold RMB and shoot the gold outlines on the left wall. Saraa should see each one turn blue.
+2. Shoot **P3** (the timed one) right before Saraa jumps to it.
+3. For **P6 and P7**, walk into the gap behind the tall rock screen.
+4. As **Saraa**, climb to the ledge and step on the amber switch. The ramp swings down.
+5. **Bat** walks up the ramp, and both stand in the green end zone.
+
+**Automated (editor open):** start a fresh 2-player PIE session, then run in the console:
+```
+py exec(open(r'D:/Creating games in term 4/My Own games/OurLastEcho/OurLastEcho/Scripts/test_climb_live.py').read())
+```
+That's 60 `ECHO_CLIMB_TEST` checks, ending in `PASS`/`FAIL`, and it takes about a minute. Saraa's climb uses **real jumps**: the test holds movement input on her client and presses jump near each platform edge, and the server has to agree where she lands. Run `test_pie_live.py` (Milestone 1) and `test_canyon_live.py` (Milestone 2) the same way, each in its own fresh PIE session.
+
+**Rebuilding** (resets hand edits to those actors): `build_spirit_bow.py` (assets, can run headless), `build_climb.py`, then `build_canyon_rocks.py`.
+
+## Results
+
+- All three live suites pass: **Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60**. Both builds (editor and game targets) have 0 warnings. Details are in TEST_REPORT.md.
+- The visual check in PIE showed Bat's over-the-shoulder aim, the reticle, the arrow's arc trail, the gold outlines behind the rock screen, and Saraa standing on a blue awake platform.
+
+**Bugs the tests caught (all fixed):**
+1. **Hops came out 5–6 m apart.** Platforms were spaced along the canyon centreline, and the curving wall stretched them. They're now placed by measured distance.
+2. **A 59 cm step at the top of the ramp,** too high to walk up (the maximum is 45 cm). The ledge is a straight block on a curving wall, so its edge sat about 1 m past the ramp's hinge. The hinge is now placed on the block's actual face.
+3. **Colours washed out:** the bow looked white, the outline cream and the spirit platforms white. Linear colours are brighter than they look, and the canyon's auto-exposure clips glow. All were retuned. The Milestone 1 spirit platforms share the blue material and now read blue too.
+
+## Known issues
+
+- **Needs a manual check: real controls and feel.** The input assets and bindings are verified, and every aim and fire path is tested by calling it directly, but nobody has pressed a real mouse button or trigger yet. Also worth checking: jump spacing, the timed platform's 7 s, and camera feel.
+- **Needs a manual check: `EchoShowAllPlatforms` typed on Saraa's machine.** Typed on Bat's side it works end to end. From Saraa's side it's a standard server RPC on her own character, but Python can't test that: editor Python makes every call run locally. The engine confirms this: `AActor::GetFunctionCallspace` returns local while `GAllowActorScriptExecutionInEditor` is set. Press the backtick key in Saraa's window and type it once to confirm.
+- **Frame rate** still can't be measured with the editor in the background (see Milestone 2). Please check `stat fps` with the editor focused.
+- **Aim slowdown isn't part of character movement's saved moves.** A remote Bat could see small corrections when he starts or stops aiming. Bat is always the listen-server host, so it doesn't happen in practice.
+- **Placeholder sounds** come from the engine's VR editor content (`/Engine/VREditor/Sounds/...`), assigned as soft references on the arrow and the platform. Swap them for real audio later.
+- **The aim trace stops on Saraa** (pawns block the arrow channel for traces), but the arrow itself flies through her. It's minor: aiming at her puts the arc's endpoint on her.
+- **Re-running `build_spirit_path.py`** moves the end zone back and resets the lights. Run `build_canyon.py` and `build_climb.py` after it.
+
+## Suggestions for Milestone 4
+
+- **A way to communicate:** a ping or marker each player can place, visible in the other's era. It's more needed now that Bat has to guide Saraa up platforms she can't see.
+- **Timer feedback for Bat:** he can't see a timed platform's countdown. Add a shrinking ring on its outline, or a small HUD timer when he aims at one.
+- **Reverse puzzles, where Saraa helps Bat:** "memory" objects only Saraa can reveal for Bat, e.g. she touches an ancient glyph and a present-day handhold appears for him.
+- **More echo-platform variants:** moving echoes, chains (one arrow wakes a sequence), or platforms that need two hits from different angles.
+- **Bow feel:** a draw-and-release animation (Control Rig or a simple montage), a bow draw sound, arrow impact dust, and a real aim-down-sights camera curve.
+- **Checkpoint polish:** a visible checkpoint marker, and checkpoints saved per player across sessions.
+
+---
 # Milestone 2 – Testing the Spirit Path, and building the canyon
 
 Branch: `milestone-2-canyon`. Built and tested live through the Unreal MCP server, with the editor open.

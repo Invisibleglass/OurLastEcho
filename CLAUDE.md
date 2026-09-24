@@ -19,6 +19,14 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 - `UEchoEditorLibrary::CreateLandscapeFromHeights` (editor-only; Python name `unreal.EchoEditorLibrary.create_landscape_from_heights`): Python can't create landscapes otherwise.
 - Rocks: `/Game/Echo/PCG/PCG_CanyonRocks` on the `CanyonRocks` PCG volume, **generate on demand only** (saved in the level; never regenerates at runtime). `EchoRockExclusion`-tagged boxes keep rocks off paths.
 - Canyon pieces are tagged `CanyonBuilder`; rock setup is tagged `CanyonRocksBuilder`. Milestone 1 actors stay `EchoBuilder`, but `build_canyon.py` retunes the Milestone 1 Sun, sky and fog.
+
+## Spirit bow, echo platforms, The Climb (Milestone 3)
+
+- `UEchoSpiritBowComponent` (`SpiritBow` on every `AOurLastEchoCharacter`; only a Living character can use it). Aim = `IA_Aim` (RMB / left trigger), Fire = `IA_Fire` (LMB / right trigger), both in `/Game/Input/IMC_Bow`, which the component adds for Bat. The **server** spawns `AEchoArrow` (replicated; every machine flies it from the replicated launch velocity). Tuning is on the component in `BP_ThirdPersonCharacter`.
+- Object channel **`EchoArrow` = `ECC_GameTraceChannel2`** (`#define ECC_EchoArrow` in EchoTypes.h), default **Block**: world geometry stops arrows, and the arrow itself ignores pawns. Anything arrows should hit, but nobody can stand on, needs a box that blocks only `ECC_EchoArrow` (like `AEchoPlatform::HitBox`).
+- `AEchoPlatform`: dormant (gold flickering outline for Bat only, no collision) or awake (blue slab for Saraa, blocks only `SpiritPawn`). `bAwake` is replicated, plus `AwakenCount` for the cue on every machine. `bTimed`/`AwakeDuration` per instance. Visibility logic is shared with the spirit platforms in `EchoVisibility.h`, including the `EchoShowAllPlatforms` debug flag on `AEchoGameState`.
+- `AEchoCheckpoint` sets a character's respawn transform. `AEchoRisingBridge` can hinge (`bHingeAtStart` + `StartRotationOffset`) for The Climb's ramp.
+- The Climb is built by `Scripts/build_climb.py` (tag `ClimbBuilder`; it also moves the `EndZone` onto the ledge). Its layout is in wall coordinates (station `s`, `u` = cm out from the left wall), and it places platforms by **measured** distance because the curving wall stretches stations.
 ## Engine & toolchain
 
 - **Unreal Engine 5.8.3**, installed at `D:\UE_5.8`. It's a registered (non-launcher) build: the `.uproject`'s `EngineAssociation` is a GUID that maps to that path via `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`.
@@ -52,7 +60,8 @@ Project scripts:
 - `Scripts/build_spirit_path.py`: builds the Milestone 1 materials, `BP_Saraa`, `BP_EchoGameMode` and `Lvl_SpiritPath`. Re-running it deletes and respawns every actor tagged `EchoBuilder`. **Once the user starts hand-tuning the level, don't re-run it unprompted** (it resets their edits). Only re-run it for structural changes, and say so when you do.
 - `Scripts/verify_spirit_path.py`: read-only dump of the generated assets and level actors.
 - `Scripts/build_canyon.py` then `Scripts/build_canyon_rocks.py`: the Milestone 2 canyon and its PCG rocks. **Open editor only.** Landscape edit layers merge on the GPU, and headless runs have no RHI. Same re-run caution as above.
-- `Scripts/test_pie_live.py` (Milestone 1, 29 checks) and `Scripts/test_canyon_live.py` (canyon, 34 checks): **live 2-player PIE tests**, run inside the editor while PIE runs. Use a fresh PIE session for each. They move characters on the server world and check the client world. `Scripts/dump_level.py` is a read-only actor dump; `Scripts/measure_fps.py` reports frame rate.
+- `Scripts/build_spirit_bow.py` (Milestone 3 input assets and materials; can run headless) and `Scripts/build_climb.py` (The Climb; open editor). Run `build_canyon_rocks.py` after `build_climb.py`.
+- `Scripts/test_pie_live.py` (Milestone 1, 29 checks), `Scripts/test_canyon_live.py` (canyon, 34 checks) and `Scripts/test_climb_live.py` (Milestone 3, 60 checks, including real jumps on Saraa's client): **live 2-player PIE tests**, run inside the editor while PIE runs. Use a fresh PIE session for each. They move characters on the server world and check the client world. `Scripts/dump_level.py` is a read-only actor dump; `Scripts/measure_fps.py` reports frame rate.
 - `Scripts/run_spirit_path_test.ps1` (runs `test_spirit_path.py`): the older headless **end-to-end test**. It launches a headless game (`-game -nullrhi`), summons a `BP_Saraa`, and uses `py` via `-ExecCmds` to sweep both characters around the level, checking collision, switch, bridge, respawn and end zone. Run it after gameplay changes: `powershell -File Scripts/run_spirit_path_test.ps1`. The last line is PASS/FAIL.
 
 Headless scripting gotchas learned the hard way:
@@ -78,6 +87,12 @@ MCP working notes (learned in Milestone 2):
 - **Don't quit the editor through MCP** (`QUIT_EDITOR`): the pending MCP call keeps the editor stuck in "Preparing to exit". Ask the user, or make sure everything is saved and end the process.
 - While the editor is open you can still compile-check C++ by building the **Game** target (`Build.bat OurLastEcho Win64 Development ...`). It doesn't touch the editor DLL.
 - A background editor on this machine runs at about 7–8 fps whatever the level does, so frame-rate numbers need the editor focused.
+- **If this session's MCP connection failed** (e.g. the session started before the editor), the tools stay unavailable until the connector is re-dialled at the end of a turn. Rather than stopping, drive the same server directly with `Scripts/tools/` (`mcp.ps1`, `ue_cmd.ps1`, `ue_py.ps1`; see its README).
+- **Python can't test client-to-server RPCs.** While editor Python runs, `GAllowActorScriptExecutionInEditor` makes `AActor::GetFunctionCallspace` return local, so a Server RPC called from Python on a client actor just runs on the client. Test RPC paths by typing console commands (`ue_cmd.ps1`), and test movement through real input (`add_movement_input`/`jump` on the client pawn, which go through the normal saved-move RPCs).
+- During PIE, `EditorAssetLibrary` refuses to run: use `unreal.load_asset('/Game/...Asset.Asset')`. `get_current_level` returns empty while PIE runs.
+- A client teleported by the server needs about 1.5 s before scripted input on it is reliable (position corrections).
+- The **Message Log** tab reopens at every PIE start and covers `CaptureEditorImage`. Close it through its tab's close button (`SlateInspectorToolset`) before capturing. `CaptureViewport` doesn't work during PIE; use `CaptureEditorImage` for Bat's view and `SlateInspectorToolset.Screenshot` on the "Client 1" window for Saraa's.
+- Material colours are **linear**: dark colours need small values, and glow above ~1.5 tonemaps to white in the canyon's auto-exposure.
 ## C++ vs Blueprint split (important)
 
 `.uasset` (Blueprints, widgets, materials, etc.) and `.umap` (levels) are **binary**, so Claude can't read or edit them directly. Therefore:

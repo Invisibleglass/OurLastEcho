@@ -6,10 +6,11 @@ Builds the Milestone 3 assets (no level changes):
     UEchoSpiritBowComponent adds IMC_Bow for Bat's local player at priority 1, on top of the template's IMC_Default.
   - Materials /Game/Echo/Materials:
         M_EchoOutline   unlit translucent glow with an optional flicker (params Color, Glow, Flicker 0..1, Opacity)
-        MI_EchoOutline  warm gold, flickering: the outline Bat sees on echo platforms
+        MI_EchoOutline  warm amber-gold, flickering: the outline Bat sees on echo platforms
         MI_ArrowTrail   gold streak behind arrows (no flicker)
         MI_Arrow        bright gold glow for the arrow (from M_EchoGlow)
-        MI_Bow          warm dark wood/gold for the placeholder bow (from M_EchoGlow)
+        MI_Bow          dark wood for the placeholder bow (from M_EchoGlow)
+        MI_SpiritPlatform  retuned to a deeper blue (shared with Milestone 1's spirit platforms)
 
 Safe to re-run: assets are updated in place (the mapping context is cleared and remapped).
 Runs headless (editor closed) or in the open editor:
