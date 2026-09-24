@@ -18,6 +18,9 @@ AEchoBoundaryVolume::AEchoBoundaryVolume()
 	Box->SetGenerateOverlapEvents(false);
 	Box->SetCanEverAffectNavigation(false);
 	Box->ShapeColor = FColor(255, 120, 40);
+
+	// The canyon uses dozens of these, 160 m tall; outlining them all clutters the viewport
+	Box->bDrawOnlyIfSelected = true;
 }
 
 void AEchoBoundaryVolume::OnConstruction(const FTransform& Transform)
