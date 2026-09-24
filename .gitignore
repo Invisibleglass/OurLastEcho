@@ -1,0 +1,36 @@
+# Unreal generated / cached folders
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Build/
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# IDE / generated project files
+.vs/
+.vscode/
+.idea/
+*.sln
+*.slnx
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# Compiled / debug artifacts
+*.pdb
+*.obj
+*.exe
+*.dll
+*.lib
+*.exp
+*.ilk
+
+# Per-user editor state
+Content/Developers/
+*.pak
+
+# Local Claude settings (personal permissions)
+.claude/settings.local.json
