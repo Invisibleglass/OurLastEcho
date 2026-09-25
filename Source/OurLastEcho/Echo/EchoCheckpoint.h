@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "EchoTypes.h"
 #include "EchoCheckpoint.generated.h"
 
 class UBoxComponent;
@@ -29,6 +30,13 @@ protected:
 	/** Respawn point relative to the actor (capsule centre, so keep Z above the floor). Facing = the actor's rotation */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Checkpoint", meta = (MakeEditWidget = true))
 	FVector RespawnPoint = FVector(0.0f, 0.0f, 100.0f);
+
+	/** If set, only characters of OnlyRealm use this checkpoint (e.g. separate checkpoints on Bat's and Saraa's routes) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Checkpoint")
+	bool bOnlyOneRealm = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Checkpoint", meta = (EditCondition = "bOnlyOneRealm"))
+	EEchoRealm OnlyRealm = EEchoRealm::Spirit;
 
 public:
 

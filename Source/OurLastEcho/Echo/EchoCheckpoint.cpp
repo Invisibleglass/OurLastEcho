@@ -42,7 +42,8 @@ void AEchoCheckpoint::OnVolumeBeginOverlap(UPrimitiveComponent* OverlappedCompon
 		return;
 	}
 
-	if (AOurLastEchoCharacter* Character = Cast<AOurLastEchoCharacter>(OtherActor))
+	AOurLastEchoCharacter* Character = Cast<AOurLastEchoCharacter>(OtherActor);
+	if (Character && (!bOnlyOneRealm || Character->GetRealm() == OnlyRealm))
 	{
 		UE_LOG(LogOurLastEcho, Log, TEXT("%s reached checkpoint %s"), *Character->GetName(), *GetName());
 		Character->SetRespawnTransform(GetRespawnTransform());

@@ -77,7 +77,8 @@ public:
  *
  *  The swing is a pendulum: gravity (scaled) plus a little air control across the rope, with the rope as a
  *  maximum-length constraint (slack rope = free fall). Momentum is kept; letting go (whip button released,
- *  or a new jump press) launches with a small boost. Touching walkable ground lets go without a boost.
+ *  or a new jump press) launches with a small boost, and the flight after it isn't braked (the template's
+ *  falling braking would otherwise cut her to walking speed). Touching walkable ground lets go without a boost.
  *
  *  Tuning lives on the owner's UEchoSwordWhipComponent (so it's all in one place in BP_Saraa).
  */
@@ -145,6 +146,11 @@ public:
 	virtual void MoveAutonomous(float ClientTimeStamp, float DeltaTime, uint8 CompressedFlags, const FVector& NewAccel) override;
 	virtual void UpdateCharacterStateBeforeMovement(float DeltaSeconds) override;
 	virtual FRotator ComputeOrientToMovementRotation(const FRotator& CurrentRotation, float DeltaTime, FRotator& DeltaRotation) const override;
+	virtual float GetMaxBrakingDeceleration() const override;
+
+	/** Is she flying from a swing (momentum kept until she lands)? */
+	UFUNCTION(BlueprintPure, Category="Echo|Swing")
+	bool IsLaunchedFromSwing() const { return bLaunchedFromSwing; }
 
 	// Saved-move input state (see FEchoSavedMove)
 	bool bWantsToSwing = false;
@@ -179,6 +185,9 @@ protected:
 
 	/** Jump was already held when the swing started, so it doesn't count as "jump to let go" until pressed again */
 	bool bJumpHeldAtLatch = false;
+
+	/** Flying from a swing: keep the momentum (no falling braking) until she lands or latches again */
+	bool bLaunchedFromSwing = false;
 
 	int32 SwingsStarted = 0;
 	int32 SwingsReleased = 0;

@@ -15,7 +15,7 @@
 
 namespace
 {
-	const FName GlowParam(TEXT("Glow"));
+	const FName AnchorGlowParam(TEXT("Glow"));
 
 	/** Latch flash: glow and light multiplier at its peak, and how long it takes to fade */
 	constexpr float LatchFlashGlow = 4.0f;
@@ -110,7 +110,7 @@ void AEchoAnchorPoint::BeginPlay()
 	if (UMaterialInterface* Material = SpiritMaterial.LoadSynchronous())
 	{
 		SpiritMID = UMaterialInstanceDynamic::Create(Material, this);
-		SpiritMID->GetScalarParameterValue(GlowParam, RestingGlow);
+		SpiritMID->GetScalarParameterValue(AnchorGlowParam, RestingGlow);
 		SpiritOrb->SetMaterial(0, SpiritMID);
 	}
 	if (UMaterialInterface* Material = HaloMaterial.LoadSynchronous())
@@ -208,7 +208,7 @@ void AEchoAnchorPoint::Tick(float DeltaSeconds)
 	const float Glow = RestingGlow * Breath * (bHighlighted ? HighlightGlow : 1.0f) * FMath::Lerp(1.0f, LatchFlashGlow, Flash);
 	if (SpiritMID)
 	{
-		SpiritMID->SetScalarParameterValue(GlowParam, Glow);
+		SpiritMID->SetScalarParameterValue(AnchorGlowParam, Glow);
 	}
 	SpiritLight->SetIntensity(LightIntensity * Breath * (bHighlighted ? 2.0f : 1.0f) * FMath::Lerp(1.0f, LatchFlashGlow, Flash));
 }

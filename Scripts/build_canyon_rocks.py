@@ -37,6 +37,9 @@ EXCLUSIONS = [
     ("RockExclusion_OverlookRamp", (2800, 1300, -500), (7600, 3000, 2000)),
     # Milestone 3's The Climb (build_climb.py): the platforms, the gap behind the screen and the ramp's foot
     ("RockExclusion_Climb", (3400, -3300, -500), (8800, 800, 2500)),
+    # Milestone 4's The Crossing (build_crossing.py): the way onto Bat's shelf, and the far rim (doorways, switch, end zone)
+    ("RockExclusion_CrossingShelf", (6000, 1500, -500), (7800, 3600, 2500)),
+    ("RockExclusion_CrossingFarRim", (13300, 2800, -500), (18300, 9000, 2500)),
 ]
 
 # (mesh, weight)

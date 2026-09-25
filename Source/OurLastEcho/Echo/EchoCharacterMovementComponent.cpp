@@ -7,6 +7,7 @@
 #include "EchoAnchorPoint.h"
 #include "EchoSwordWhipComponent.h"
 #include "OurLastEchoCharacter.h"
+#include "OurLastEcho.h"
 
 namespace
 {
@@ -18,6 +19,13 @@ namespace
 
 	/** The server uses the client's rope length if it's within this of its own measurement (so both simulate the same rope) */
 	constexpr float RopeTolerance = 150.0f;
+
+	const TCHAR* SwingRole(const ACharacter* Character)
+	{
+		if (!Character) return TEXT("?");
+		if (Character->bClientUpdating) return TEXT("replay");
+		return Character->HasAuthority() ? TEXT("server") : TEXT("client");
+	}
 }
 
 // ------------------------------------------------------------------ network move data
@@ -237,16 +245,19 @@ void UEchoCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float D
 		if (!SwingAnchorActor.IsValid())
 		{
 			// Bat's third arrow removed the anchor we were hanging from
+			UE_LOG(LogOurLastEcho, Verbose, TEXT("Swing: %s end: anchor gone"), SwingRole(CharacterOwner));
 			EndSwing(false);
 		}
 		else if (!bWantsToSwing || (CharacterOwner->bPressedJump && !bJumpHeldAtLatch))
 		{
+			UE_LOG(LogOurLastEcho, Verbose, TEXT("Swing: %s end: wants=%d jump=%d held=%d at %s"), SwingRole(CharacterOwner), bWantsToSwing, CharacterOwner->bPressedJump, bJumpHeldAtLatch, *UpdatedComponent->GetComponentLocation().ToCompactString());
 			EndSwing(true);
 		}
 	}
 	else if (bWantsToSwing && !TryStartSwing())
 	{
 		// A request that can't be honoured is dropped, so it can't fire later when the anchor comes into range
+		UE_LOG(LogOurLastEcho, Verbose, TEXT("Swing: %s start refused at %s (anchor %s)"), SwingRole(CharacterOwner), *UpdatedComponent->GetComponentLocation().ToCompactString(), *SwingAnchorRequest.ToCompactString());
 		bWantsToSwing = false;
 	}
 }
@@ -282,6 +293,7 @@ bool UEchoCharacterMovementComponent::TryStartSwing()
 	SwingRopeLength = FMath::Clamp(Rope, Whip->MinRopeLength, Whip->WhipRange + RangeTolerance);
 	SwingAnchorActor = Anchor;
 	bJumpHeldAtLatch = CharacterOwner->bPressedJump;
+	bLaunchedFromSwing = false;
 
 	// A tug towards the anchor gets the swing going; from the ground, a hop gets her off it
 	Velocity += (SwingAnchor - Location).GetSafeNormal2D() * Whip->LatchBoost;
@@ -290,6 +302,7 @@ bool UEchoCharacterMovementComponent::TryStartSwing()
 		Velocity.Z = FMath::Max(Velocity.Z, Whip->GroundLatchHop);
 	}
 
+	UE_LOG(LogOurLastEcho, Verbose, TEXT("Swing: %s start at %s vel %s rope %.1f (req %.1f) real=%d"), SwingRole(CharacterOwner), *Location.ToCompactString(), *Velocity.ToCompactString(), SwingRopeLength, SwingRopeRequest, IsRealMove());
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(EEchoCustomMovement::Swing));
 
 	if (IsRealMove())
@@ -317,6 +330,8 @@ void UEchoCharacterMovementComponent::EndSwing(bool bLaunch)
 	}
 
 	SwingAnchorActor = nullptr;
+	// Keep her momentum until she lands (cleared in OnMovementModeChanged)
+	bLaunchedFromSwing = true;
 	SetMovementMode(MOVE_Falling);
 
 	if (IsRealMove())
@@ -338,6 +353,22 @@ void UEchoCharacterMovementComponent::OnMovementModeChanged(EMovementMode Previo
 	{
 		SwingAnchorActor = nullptr;
 	}
+
+	// Landed (or anything but flying): the swing's momentum is spent
+	if (MovementMode != MOVE_Falling && !IsSwinging())
+	{
+		bLaunchedFromSwing = false;
+	}
+}
+
+float UEchoCharacterMovementComponent::GetMaxBrakingDeceleration() const
+{
+	// Flying from a swing keeps its speed; air control can still steer
+	if (MovementMode == MOVE_Falling && bLaunchedFromSwing)
+	{
+		return 0.0f;
+	}
+	return Super::GetMaxBrakingDeceleration();
 }
 
 void UEchoCharacterMovementComponent::PhysCustom(float DeltaTime, int32 Iterations)
@@ -408,6 +439,7 @@ void UEchoCharacterMovementComponent::PhysSwing(float DeltaTime, int32 Iteration
 			if (Velocity.Z <= 0.0f && IsValidLandingSpot(UpdatedComponent->GetComponentLocation(), Hit))
 			{
 				// Touched down on walkable ground: let go (no boost) and let falling physics land her
+				UE_LOG(LogOurLastEcho, Verbose, TEXT("Swing: %s end: landed at %s"), SwingRole(CharacterOwner), *UpdatedComponent->GetComponentLocation().ToCompactString());
 				EndSwing(false);
 				RemainingTime += TimeTick * (1.0f - Hit.Time);
 				StartNewPhysics(RemainingTime, Iterations);
@@ -442,6 +474,7 @@ void UEchoCharacterMovementComponent::OnClientCorrectionReceived(FNetworkPredict
 	{
 		const float Error = FVector::Dist(NewLocation, UpdatedComponent->GetComponentLocation());
 		MaxCorrectionDistance = FMath::Max(MaxCorrectionDistance, Error);
+		UE_LOG(LogOurLastEcho, Verbose, TEXT("Swing: correction %.1f cm, server mode %d, client mode %d/%d, ts %.3f"), Error, ServerMovementMode & 0x0F, MovementMode.GetValue(), CustomMovementMode, TimeStamp);
 		TotalCorrectionDistance += Error;
 	}
 }

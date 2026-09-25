@@ -58,7 +58,7 @@ public:
 
 	/** Swing speed cap in cm/s */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 100))
-	float MaxSwingSpeed = 2600.0f;
+	float MaxSwingSpeed = 1600.0f;
 
 	/** Swing speed: a tug towards the anchor when the whip latches, in cm/s, so even a slow latch swings */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 0))
@@ -70,7 +70,7 @@ public:
 
 	/** Steering acceleration from the move input while swinging, in cm/s^2 (across the rope) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 0))
-	float SwingAirControl = 700.0f;
+	float SwingAirControl = 300.0f;
 
 	/** Shortest rope, in cm. Latching closer than this leaves the rope slack until she falls further */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 50))
@@ -82,11 +82,11 @@ public:
 
 	/** Extra speed along the swing when letting go, in cm/s */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Release", meta = (ClampMin = 0))
-	float ReleaseBoost = 300.0f;
+	float ReleaseBoost = 250.0f;
 
 	/** Extra upward speed when letting go, in cm/s */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Release", meta = (ClampMin = 0))
-	float ReleaseUpBoost = 300.0f;
+	float ReleaseUpBoost = 250.0f;
 
 	// ---- Input (Enhanced Input assets made by Scripts/build_sword_whip.py)
 

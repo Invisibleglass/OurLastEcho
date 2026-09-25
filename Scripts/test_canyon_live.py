@@ -68,7 +68,7 @@ def step_surfaces():
     cy = G["centre_y"]
     for who in ("Bat", "Saraa"):
         ch = S[who]
-        for x in (-9000.0, 8000.0, 15000.0):
+        for x in (-9000.0, 6000.0, 17000.0):   # clear of the ravine and of The Crossing's chasm (Milestone 4)
             ground = G["ground_height"](x, cy(x))
             z = drop(ch, x, cy(x), ground)
             check(abs(z - 97 - ground) < 30, f"{who:5} stands on the canyon floor at x={x:.0f} (feet {z - 97:.0f}, ground {ground:.0f})")

@@ -3,7 +3,8 @@ Builds Milestone 2, the canyon around the Spirit Path, into /Game/Echo/Maps/Lvl_
   - Materials  /Game/Echo/Materials: M_CanyonRock (world-space strata, no textures) + MI_CanyonRock,
                MI_CanyonBoulder, MI_CanyonGround
   - Landscape  canyon floor (via unreal.EchoEditorLibrary.create_landscape_from_heights) with a
-               ravine cut right across the canyon under the Spirit Path gap
+               ravine cut right across the canyon under the Spirit Path gap, and (Milestone 4) the
+               chasm of "The Crossing" past The Climb (CHASM_S; its pieces are built by build_crossing.py)
   - Walls      layered, terraced stacks of rotated engine cubes along both sides, closed at both ends
   - Overlook   raised rock shelf with a ramp, on the right wall just past the end zone
   - Bounds     EchoBoundaryVolumes along the wall faces and across both ends, plus a canyon-wide
@@ -44,6 +45,8 @@ X_START_END = -16500        # 150 m before the start of the Spirit Path
 X_FAR_END = 18600           # 150 m past the end zone side
 PLAY_X = (-1500, 3600)      # Milestone 1 floor slabs
 RAVINE_X = (0, 1600)        # Bat's pit
+CHASM_S = (7850, 15000)     # Milestone 4 "The Crossing": a chasm right across the canyon (canyon stations), past The Climb
+CHASM_FLOOR = -1400.0
 SEGMENT = 1400              # wall segment spacing along the canyon
 
 # Control points along X: half-widths (centreline to wall face) and wall heights, per side.
@@ -116,6 +119,16 @@ def face_point(side, x, extra=0.0):
     nx, ny = outward(side, x)
     d = half_width(side, x) + extra
     return (x + nx * d, centre_y(x) + ny * d)
+
+
+def station_of(x, y):
+    """Canyon station (centreline X) and signed sideways offset (+ = towards the R wall) of a world point"""
+    s = x
+    for _ in range(8):
+        slope = (centre_y(s + 1.0) - centre_y(s - 1.0)) / 2.0
+        s += ((x - s) + (y - centre_y(s)) * slope) / (1.0 + slope * slope)
+    a = math.radians(centre_yaw(s))
+    return s, (x - s) * -math.sin(a) + (y - centre_y(s)) * math.cos(a)
 
 
 def in_play_zone(x, y, margin=0.0):
@@ -336,6 +349,12 @@ def ground_height(x, y):
     # Ravine right across the canyon under the Spirit Path gap (inside the Milestone 1 respawn volume)
     if RAVINE_X[0] < x < RAVINE_X[1] and ad < w + 2500:
         h = -1400.0
+
+    # The Crossing's chasm: wall to wall (and under the walls), edges square to the curving canyon
+    if CHASM_S[0] - 4000 < x < CHASM_S[1] + 4000:
+        s, lateral = station_of(x, y)
+        if CHASM_S[0] < s < CHASM_S[1] and abs(lateral) < half_width(1 if lateral >= 0 else -1, s) + 2500:
+            h = CHASM_FLOOR
     return h
 
 
@@ -360,7 +379,8 @@ def build_landscape(material):
 # ------------------------------------------------------------------ walls
 
 def near_ravine(x):
-    return RAVINE_X[0] - 1600 < x < RAVINE_X[1] + 1600
+    """Wall segments that must reach down past a pit's floor"""
+    return RAVINE_X[0] - 1600 < x < RAVINE_X[1] + 1600 or CHASM_S[0] - 1600 < x < CHASM_S[1] + 1600
 
 
 def face_chord(side, x, extra):
