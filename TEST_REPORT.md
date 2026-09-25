@@ -109,3 +109,53 @@ Run on branch `milestone-4-sword-whip` straight after branching from `main` (Mil
 | `test_menu_live.py` (settings / pause menu) | ✅ Pass, 17/17 |
 
 Straight after the new movement component went in (both characters now use `UEchoCharacterMovementComponent`), `test_pie_live.py` and `test_climb_live.py` (which makes real jumps on Saraa's client) were run again and still pass. The Climb test's bow check now counts only the bow's own parts, because Saraa carries a sword now.
+
+### Milestone 4 results (end of milestone)
+
+All live tests ran in fresh 2-player listen-server PIE sessions at ~45 fps, with *Use Less CPU when in Background* off (see *Test conditions* below).
+
+| Item | Result | Notes |
+|---|---|---|
+| Compiles, no warnings | ✅ Pass | Editor and Game targets: `Result: Succeeded`, 0 warnings. |
+| Arrows stick in anchor targets and become anchor points | ✅ Pass | The anchor lands within 5 cm of the target's centre and exists on both machines at the same point. Saraa sees the blue spirit anchor and not the arrow; Bat sees his stuck arrow and not the anchor. |
+| Other surfaces don't hold anchors | ✅ Pass | An arrow into plain canyon wall makes no anchor. |
+| Only 2 anchors; a third removes the oldest | ✅ Pass | Server and client both go back to 2. The oldest is gone on both machines, and re-shooting target 1 removed the then-oldest. |
+| Anchorable surfaces defined in one place | ✅ Pass (by design) | `UEchoAnchorRules::CanHoldAnchor(Hit)` is the only check (see NOTES.md). Arrow hits already carry the physical material. |
+| Only Saraa has the whip | ✅ Pass | `CanUseWhip` is true for Saraa only. Saraa carries the 4-part sword and Bat has none. Bat's whip button and lash do nothing. |
+| Targeting highlights the right anchor | ✅ Pass | At every latch in every run, the highlighted anchor was the intended one. |
+| Latch, swing, release and chain | ✅ Pass | **Real swings on Saraa's client**, checked on the server: swing 1 lands on pillar 1, the chained swing on pillar 2, swing 3 on the echo platform. Jump lets go of a swing. The snap and flash play on both machines, and both see the whip line. |
+| The chain is really needed | ✅ Pass | Swinging on one arch anchor while pumping with the stick, the best possible release would land 1.9 m short of pillar 2. |
+| Keyboard/mouse and gamepad | ✅ Pass (bindings) / ⚠️ needs a manual test | `IMC_Whip` maps IA_Whip to LMB, E and Gamepad_RightTrigger. Jump (Space / gamepad bottom face button) releases. No real device was pressed. |
+| **Smooth for Saraa as the client** | ✅ Pass | **0 corrections** in every swing, with no emulation, at 64 ms ping with 2% loss, and at **105 ms ping with 30 ms jitter and 5% loss**. Her machine predicts the swing and the server replays exactly the same one (same latch point, rope length and release, logged to 0.01 cm). |
+| **Smooth for Saraa as the host** | ✅ Pass | `Echo.HostPlaysSaraa 1`: 39 checks including both swings and the whip line on Bat's (client) machine, at 105 ms ping and 5% loss. 0 corrections, as expected for the host. |
+| Both players complete The Crossing | ✅ Pass | The drawbridge stays up until Saraa's switch. Bat walks the shelf, crosses and goes through his doorway (real movement input). Saraa steps up through hers. The end zone completes only with both players, on both machines. |
+| Falling respawns at the chasm start; anchors stay | ✅ Pass | Saraa respawns on The Climb's ledge (Spirit-only checkpoint); Bat's anchors are unchanged. |
+| Anchor removed under Saraa | ✅ Pass | When Bat's arrows remove the anchor she hangs from, she drops on both machines. |
+| Tuning values editable in Blueprint | ✅ Pass (by design) | All whip and swing tuning on `SwordWhip` (BP_Saraa); `MaxActiveAnchors` on `SpiritBow`. |
+| Debug command | ✅ Pass | `EchoWhipDebug` toggles on and off. The drawing was checked in a screenshot. |
+| Stretch: whip lash on a training dummy | ✅ Pass (server) / ⚠️ client RPC needs a manual test | A lash at the dummy hits it, and both machines see the hit. A lash away misses; the cooldown works; Bat can't lash. Driven on the server's copy of Saraa, because editor Python can't send her client's server RPC. |
+| Earlier mechanics still work | ✅ Pass | Milestone 1 29/29, Milestone 2 34/34 (floor-check spots moved out of the new chasm), Milestone 3 60/60 (the end-zone check now accepts its new place past The Climb), menu 17/17, and the older headless end-to-end test (`run_spirit_path_test.ps1`) PASS. |
+
+**Totals:** Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, settings menu 17/17, The Crossing 68/68, The Crossing with Saraa as host 39/39.
+
+### How the networked swing feels (network emulation)
+
+Unreal's packet simulation was switched on with its console variables during the test (`NetEmulation.PktLag`, `PktLagVariance`, `PktLoss`), and the resulting ping was read from Saraa's player state:
+
+| Conditions | Measured ping | Swing 1 | Chained swing | Swing 3 | Corrections |
+|---|---|---|---|---|---|
+| None | ~0 ms | lands | lands | lands | 0 |
+| Lag 50 ms, jitter 10, loss 2% | 64 ms | lands | lands | lands | 0 |
+| Lag 100 ms, jitter 30, loss 5% | 105 ms | lands | lands | lands | 0 |
+| Same, Saraa as the host | 105 ms (Bat) | lands | lands | – | 0 |
+
+**What that means for feel:**
+- **Saraa's own swing:** she never gets snapped back, because her machine and the server always agree. Latching, releasing and chaining respond on her machine immediately, with no round trip. Lost packets don't matter: the latch and release are marked "important" moves, so they're re-sent until acknowledged.
+- **The one place a correction does happen** is when the server knows something her machine doesn't yet. The test covers the main case: Bat's arrow removes the anchor she's hanging from, so she drops a round trip later than the server says. That's a single, expected correction.
+- **Not measured:** how smooth *her* swing looks on Bat's screen. That uses the engine's normal smoothing for other players (see NOTES.md, *Known issues*).
+
+### Test conditions and tooling notes
+
+- **Background frame rate:** with *Use Less CPU when in Background* on (it resets to on at every editor start), a background editor ran the two PIE worlds at **~3 fps**. At that rate every scripted input is 0.33 s apart, and even plain walking drew corrections (40–140 cm per frame). Those are an artefact of the frame rate, not the swing. With the setting off, the editor ran at **~46 fps** and every correction disappeared. CLAUDE.md has the MCP call that turns it off.
+- **Engine crash:** there was one editor crash inside the engine's derived-data cache HTTP code (`DerivedDataRequestOwner.cpp` assertion) as PIE started. It's unrelated to the project; the next start was fine.
+- **Editor Python can't send client-to-server RPCs** (same as Milestone 3). Everything on Saraa's side that goes through normal movement was tested on her real client: the latch, swing and release travel inside movement updates, not RPCs. The lash's RPC is the one path left for a manual check.

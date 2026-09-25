@@ -88,7 +88,7 @@ def main():
     # Colours are linear and the canyon's auto-exposure clips glow above ~1.5 to white, so: saturated, modest glow
     build_instance("MI_SpiritAnchor", glow, {"Color": unreal.LinearColor(0.05, 0.32, 1.0, 1.0)}, {"Glow": 1.2})
     build_instance("MI_SpiritAnchorHalo", outline, {"Color": unreal.LinearColor(0.08, 0.35, 1.0, 1.0)}, {"Glow": 1.0, "Flicker": 0.0, "Opacity": 0.3})
-    build_instance("MI_WhipLine", outline, {"Color": unreal.LinearColor(0.12, 0.45, 1.0, 1.0)}, {"Glow": 1.4, "Flicker": 0.0, "Opacity": 0.85})
+    build_instance("MI_WhipLine", outline, {"Color": unreal.LinearColor(0.03, 0.25, 1.0, 1.0)}, {"Glow": 0.8, "Flicker": 0.0, "Opacity": 0.9})
     build_instance("MI_SpiritSword", glow, {"Color": unreal.LinearColor(0.25, 0.45, 0.85, 1.0)}, {"Glow": 0.35})
     build_instance("MI_AnchorTargetBoard", glow, {"Color": unreal.LinearColor(0.45, 0.3, 0.1, 1.0)}, {"Glow": 0.15})
     build_instance("MI_AnchorTargetRing", glow, {"Color": unreal.LinearColor(0.55, 0.03, 0.02, 1.0)}, {"Glow": 0.35})

@@ -27,6 +27,25 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 - `AEchoPlatform`: dormant (gold flickering outline for Bat only, no collision) or awake (blue slab for Saraa, blocks only `SpiritPawn`). `bAwake` is replicated, plus `AwakenCount` for the cue on every machine. `bTimed`/`AwakeDuration` per instance. Visibility logic is shared with the spirit platforms in `EchoVisibility.h`, including the `EchoShowAllPlatforms` debug flag on `AEchoGameState`.
 - `AEchoCheckpoint` sets a character's respawn transform. `AEchoRisingBridge` can hinge (`bHingeAtStart` + `StartRotationOffset`) for The Climb's ramp.
 - The Climb is built by `Scripts/build_climb.py` (tag `ClimbBuilder`; it also moves the `EndZone` onto the ledge). Its layout is in wall coordinates (station `s`, `u` = cm out from the left wall), and it places platforms by **measured** distance because the curving wall stretches stations.
+## Sword whip, anchor arrows, The Crossing (Milestone 4)
+
+- **Anchors:** an arrow hit becomes an anchor only if **`UEchoAnchorRules::CanHoldAnchor(Hit)`** says so (`EchoAnchorable.h`). That's the one place the rule lives; today it's a `UEchoAnchorableComponent` on the hit actor, later maybe a physical material. The server's `UEchoSpiritBowComponent::CreateAnchor` spawns a replicated `AEchoAnchorPoint`. Bat sees the stuck arrow, Saraa a blue orb at `GetSwingPoint()`. The bow keeps at most `MaxActiveAnchors` (2) and destroys the oldest. `AEchoAnchorTarget` is the placeholder board (Bat-only visibility; blocks only `ECC_EchoArrow`).
+- **Whip:** `UEchoSwordWhipComponent` (`SwordWhip` on every character; Spirit realm only).
+  - Local targeting and highlight, input (`IA_Whip` / `IMC_Whip`: LMB, E, right trigger), and the sword and whip-line look.
+  - Cues through replicated `bLatched` / `LatchCount` (COND_SkipOwner).
+  - The lash (stretch goal) is a server RPC, and `AEchoTrainingDummy` takes the hit.
+  - **All swing tuning lives on this component** (BP_Saraa).
+- **The swing is movement, not an RPC:** `UEchoCharacterMovementComponent` (both characters use it; set in `AOurLastEchoCharacter`'s `FObjectInitializer` constructor) has a custom mode `EEchoCustomMovement::Swing`.
+  - The whip input (`bWantsToSwing` + anchor point + rope length) is part of the **saved move** (`FEchoSavedMove`, `FLAG_Custom_0`) and of the **network move data** (`FEchoNetworkMoveData`), so the server replays exactly the client's latch.
+  - Anything that changes swing state must go through these: `RequestSwing` / `StopSwingRequest` / `CancelSwing`, never direct mode changes. Otherwise prediction breaks.
+  - After a swing, falling braking is off until landing (`bLaunchedFromSwing`, `GetMaxBrakingDeceleration`).
+  - Verbose `Swing:` logs (`log LogOurLastEcho Verbose`) show latch and release on client, server and replay, and every correction.
+- **Level:** `build_canyon.py` cuts The Crossing's chasm into the landscape (`CHASM_S`, stations 7850–15000; walls reach down past it). `Scripts/build_crossing.py` (tag `CrossingBuilder`) builds everything in it, places the training dummy, and **moves the EndZone to the far rim**.
+  - Layout in wall coordinates: `u` = from the left wall, `r` = from the right wall.
+  - Its swing distances were tuned against real swings. Moving an anchor or pillar means re-running `test_crossing_live.py`, which also proves one arch anchor can't replace the chain.
+- `AEchoCheckpoint` can be limited to one realm (`bOnlyOneRealm` / `OnlyRealm`): separate respawns for Bat's and Saraa's routes.
+- **Swapping roles for tests:** console variable `Echo.HostPlaysSaraa 1` before starting PIE (or `BP_EchoGameMode.bHostPlaysSaraa`). Setting the Blueprint CDO from Python does **not** reach PIE: the Blueprint recompiles when PIE starts.
+
 ## Settings / pause menu
 
 - `AOurLastEchoPlayerController` opens `/Game/Echo/UI/WBP_SettingsMenu` (parent `UEchoSettingsMenu`, BindWidget names `MasterVolumeSlider`, `MasterVolumeText`, `ResumeButton`, `QuitButton`) on `IA_Menu` (Esc / P / gamepad Start; `bTriggerWhenPaused`) or the `EchoMenu` console command. The server's `AEchoGameMode::SetPlayerInSettingsMenu` keeps the list of players in the menu (replicated on `AEchoGameState` for the HUD banner) and uses the engine's `SetPause`/`ClearPause`.
@@ -66,7 +85,12 @@ Project scripts:
 - `Scripts/build_spirit_path.py`: builds the Milestone 1 materials, `BP_Saraa`, `BP_EchoGameMode` and `Lvl_SpiritPath`. Re-running it deletes and respawns every actor tagged `EchoBuilder`. **Once the user starts hand-tuning the level, don't re-run it unprompted** (it resets their edits). Only re-run it for structural changes, and say so when you do.
 - `Scripts/verify_spirit_path.py`: read-only dump of the generated assets and level actors.
 - `Scripts/build_canyon.py` then `Scripts/build_canyon_rocks.py`: the Milestone 2 canyon and its PCG rocks. **Open editor only.** Landscape edit layers merge on the GPU, and headless runs have no RHI. Same re-run caution as above.
-- `Scripts/build_spirit_bow.py` (Milestone 3 input assets and materials; can run headless) and `Scripts/build_climb.py` (The Climb; open editor). Run `build_canyon_rocks.py` after `build_climb.py`.
+- `Scripts/build_spirit_bow.py` (Milestone 3 input assets and materials; can run headless) and `Scripts/build_climb.py` (The Climb; open editor).
+- `Scripts/build_sword_whip.py` (Milestone 4 input assets and materials; can run headless) and `Scripts/build_crossing.py` (The Crossing; open editor).
+- **Level build order:** `build_canyon.py` → `build_climb.py` → `build_crossing.py` (it moves the EndZone after The Climb did) → `build_canyon_rocks.py`.
+- `Scripts/test_crossing_live.py`: Milestone 4 live test, 68 checks, with real predicted swings on Saraa's client.
+  - Options (set as Python globals before exec): `ECHO_CROSS_MODE` (`swing1` / `chain` / `swing3` / `host_saraa`), `ECHO_CROSS_NETEMU` (a list of `NetEmulation.*` console commands), `ECHO_CROSS_TRACE`.
+  - Release timing comes from a predicted landing, not fixed delays, so it copes with frame rate.
 - `Scripts/test_pie_live.py` (Milestone 1, 29 checks), `Scripts/test_canyon_live.py` (canyon, 34 checks) and `Scripts/test_climb_live.py` (Milestone 3, 60 checks, including real jumps on Saraa's client): **live 2-player PIE tests**, run inside the editor while PIE runs. Use a fresh PIE session for each. They move characters on the server world and check the client world. `Scripts/dump_level.py` is a read-only actor dump; `Scripts/measure_fps.py` reports frame rate.
 - `Scripts/run_spirit_path_test.ps1` (runs `test_spirit_path.py`): the older headless **end-to-end test**. It launches a headless game (`-game -nullrhi`), summons a `BP_Saraa`, and uses `py` via `-ExecCmds` to sweep both characters around the level, checking collision, switch, bridge, respawn and end zone. Run it after gameplay changes: `powershell -File Scripts/run_spirit_path_test.ps1`. The last line is PASS/FAIL.
 
@@ -92,13 +116,26 @@ MCP working notes (learned in Milestone 2):
 - Screenshots (`CaptureViewport`, `SlateInspectorToolset.Screenshot`) come back as megabytes of base64 that get dumped to a tool-results file. Decode that file to a JPEG and `Read` it.
 - **Don't quit the editor through MCP** (`QUIT_EDITOR`): the pending MCP call keeps the editor stuck in "Preparing to exit". Ask the user, or make sure everything is saved and end the process.
 - While the editor is open you can still compile-check C++ by building the **Game** target (`Build.bat OurLastEcho Win64 Development ...`). It doesn't touch the editor DLL.
-- A background editor on this machine runs at about 7–8 fps whatever the level does, so frame-rate numbers need the editor focused.
+- A background editor is throttled (about 3–8 fps) unless background CPU throttling is turned off (see "Learned in Milestone 4"); with it off, 2-player PIE ran at ~45 fps in the background. Real frame-rate numbers still need the editor focused.
 - **If this session's MCP connection failed** (e.g. the session started before the editor), the tools stay unavailable until the connector is re-dialled at the end of a turn. Rather than stopping, drive the same server directly with `Scripts/tools/` (`mcp.ps1`, `ue_cmd.ps1`, `ue_py.ps1`; see its README).
 - **Python can't test client-to-server RPCs.** While editor Python runs, `GAllowActorScriptExecutionInEditor` makes `AActor::GetFunctionCallspace` return local, so a Server RPC called from Python on a client actor just runs on the client. Test RPC paths by typing console commands (`ue_cmd.ps1`), and test movement through real input (`add_movement_input`/`jump` on the client pawn, which go through the normal saved-move RPCs).
 - During PIE, `EditorAssetLibrary` refuses to run: use `unreal.load_asset('/Game/...Asset.Asset')`. `get_current_level` returns empty while PIE runs.
 - A client teleported by the server needs about 1.5 s before scripted input on it is reliable (position corrections).
 - The **Message Log** tab reopens at every PIE start and covers `CaptureEditorImage`. Close it through its tab's close button (`SlateInspectorToolset`) before capturing. `CaptureViewport` doesn't work during PIE; use `CaptureEditorImage` for Bat's view and `SlateInspectorToolset.Screenshot` on the "Client 1" window for Saraa's.
 - Material colours are **linear**: dark colours need small values, and glow above ~1.5 tonemaps to white in the canyon's auto-exposure.
+
+Learned in Milestone 4:
+- **Turn off background throttling after every editor start**, before any live test. Otherwise two PIE worlds run at ~3 fps in the background, and every scripted move (even walking) draws network corrections. With it off, they run at ~45 fps. The setting resets on restart:
+  `powershell -File Scripts/tools/mcp.ps1 -Tool set_properties -Toolset editor_toolset.toolsets.object.ObjectTools -ArgsJson '{"instance":{"refPath":"/Script/UnrealEd.Default__EditorPerformanceSettings"},"values":"{\"bThrottleCPUWhenNotForeground\":false}"}'`
+  (`get_properties` takes `{"instance":{...},"properties":[...]}`.) Check with `Scripts/measure_fps.py`.
+- **Network emulation in PIE:** `NetEmulation.PktLag <ms>`, `NetEmulation.PktLagVariance <ms>`, `NetEmulation.PktLoss <percent>` console variables apply to the running session; set them back to 0 afterwards. Read the effect from a PlayerState's `get_ping_in_milliseconds()`.
+- **Unity builds merge .cpp files:** names in anonymous namespaces must be unique across the module (a second `GlowParam` broke the build).
+- Using `FVector_NetQuantize*` serialization in our code needs the **`NetCore`** module (the monolithic Game target linked without it; the editor DLL didn't).
+- `CaptureViewport` needs every parameter: `captureTransform` (`location` / `rotation` / `scale`), `annotations` (all fields, e.g. `gridSpacing` 0, `maxLabels` 0, `classFilter.refPath` "/Script/Engine.Actor") and `bShowUI`.
+- In PIE the **Message Log is its own window**. Close it by clicking the small button inside its tab (find it with `Snapshot` on the window's splitter). Window refs (e.g. the "Client 1" window) change every PIE session, so look them up again before `Screenshot`.
+- **Live Coding** is fine for .cpp-only changes (`LiveCoding.Compile`, then wait for "Live coding succeeded" in the log). If the editor dies afterwards, the patch is gone: rebuild with `Build.bat` before relaunching.
+- When the editor hangs with `CrashReportClientEditor` running, it has crashed: read `Saved/Crashes/<newest>/CrashContext.runtime-xml`, then end both processes.
+- PowerShell `Set-Content -Encoding utf8` writes a BOM, which Python in the editor rejects (`U+FEFF`). Edit scripts with the Edit tool or `sed`.
 ## C++ vs Blueprint split (important)
 
 `.uasset` (Blueprints, widgets, materials, etc.) and `.umap` (levels) are **binary**, so Claude can't read or edit them directly. Therefore:

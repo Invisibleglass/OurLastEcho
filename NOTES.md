@@ -1,3 +1,155 @@
+# Milestone 4 – The sword whip and anchor arrows
+
+Branch: `milestone-4-sword-whip`, branched from `main` after Milestone 3 was merged. Built with the editor open, driven through its MCP server.
+
+**New mechanic:** when Bat shoots an anchor target, his arrow sticks in it and becomes a glowing anchor point. Saraa latches onto it with her sword whip and swings from it.
+
+## What was built
+
+**Anchor arrows** (Bat's same bow and arrow; what happens depends on what the arrow hits):
+- **Echo platform:** wakes it, as before.
+- **Anchorable surface:** the arrow sticks and becomes an **anchor point** (`AEchoAnchorPoint`, spawned and replicated by the server).
+- **Anything else:** nothing happens; the arrow stays stuck for 2.5 s, then disappears.
+- **"Can this surface hold an anchor?"** is a single function, **`UEchoAnchorRules::CanHoldAnchor(Hit)`** (`EchoAnchorable.h`). The arrow never checks anything else. Today it looks for a `UEchoAnchorableComponent` on the hit actor. Arrow sweeps already return the physical material (`bReturnMaterialOnMove`), so switching to "a certain rock or wood" later means changing only that function; a commented example is in it.
+- **Anchor targets** (`AEchoAnchorTarget`): a round, ringed board with the Anchorable component. Only Bat sees it (present-day wood; Saraa sees it only with `EchoShowAllPlatforms` on). Its board blocks only the arrow channel.
+- **What each player sees:** Bat sees his arrow stuck in the target. Saraa sees a glowing blue orb with a faint halo, 35 cm off the surface. That's the point her whip latches onto.
+- **Max 2 anchors** (`MaxActiveAnchors` on the SpiritBow component). A third removes the oldest. If Saraa is hanging from the removed one, she drops on both machines.
+- **Networking:** the anchor's position and surface replicate once, so both machines agree to the millimetre (tested).
+
+**The sword whip** (`UEchoSwordWhipComponent`, on every character; only a Spirit-realm character can use it):
+- **Targeting:** every frame, on Saraa's own machine. The nearest anchor within **whip range (18 m)**, within **40°** of the camera's view and in clear line of sight gets highlighted: the orb swells and brightens, and blue brackets appear around it on her screen.
+- **Latch:** hold the whip button: **left mouse / E / gamepad right trigger** (`IA_Whip` in `IMC_Whip`, from `Scripts/build_sword_whip.py`). The whip line lashes out to the anchor in 0.12 s, with a snap sound and a flash on both machines.
+- **Swing:** a pendulum under the anchor.
+  - Physics: gravity (×1.4) with the rope as a maximum length. A slack rope is free fall, and when it goes taut she keeps only her speed along the swing.
+  - Steering: a little air control from the move stick. She faces the way she swings.
+  - Momentum is kept, capped at 16 m/s.
+  - Walkable ground: touching it ends the swing. Walls: she scrapes along them.
+- **Release:** let go of the whip button, **or press jump**. She launches with her momentum plus a small forward and upward boost. Her speed isn't braked in the air until she lands (the template's 15 m/s² falling braking otherwise killed the launch).
+- **Chain:** press the whip again mid-air to latch onto the next anchor. The anchor she just left can't be re-targeted for 0.5 s.
+- **Bat can't use it:** no mesh, no input, and his movement refuses to swing.
+- **Placeholder look:**
+  - Sword: a 4-part sword from engine shapes on her left hip, raised at her right shoulder and pointing at the anchor while she swings.
+  - Line: a stretched thin cylinder (a greybox "rope", no cable plugin), visible to both players.
+
+**Networking the swing:** the swing is a **custom movement mode** in a new `UEchoCharacterMovementComponent`, which both characters now use. It runs inside Unreal's normal server-authoritative movement with client prediction.
+- Saraa's machine swings immediately from her input.
+- Each move sent to the server carries the whip state (a move flag, the anchor point and the rope length), so the server replays exactly the same latch.
+- The server corrects her only if the two disagree.
+
+Result: **0 corrections** in every swing, including at 105 ms ping with 30 ms jitter and 5% packet loss, and with Saraa as the host. Details are in TEST_REPORT.md.
+
+**New level section, "The Crossing"** (`Scripts/build_crossing.py`, tag `CrossingBuilder`), straight after The Climb:
+
+| | |
+|---|---|
+| **Chasm** | 71 m long, wall to wall, 14 m deep (stations 7850–15000). It's cut into the landscape by `build_canyon.py`, with a kill volume inside. |
+| **Swing 1** (single, teaches the basics) | From The Climb's ledge (7.4 m up), under target 1 on an overhang, to pillar 1. |
+| **Swing 2** (chained, teaches the 2-anchor limit) | From pillar 1, under targets 2 and 3 on the underside of a 22 m-deep rock arch, to pillar 2. Both anchors must exist before she jumps. One arch anchor alone can't reach pillar 2, however she times the release (checked by the test). The arch's rock "curtain" at its back edge blocks the big high flings a single anchor would need. |
+| **Swing 3** (new + old mechanics) | From pillar 2, under target 4 on another overhang, onto an **echo platform** Bat must wake. From it she steps up 90 cm through **her doorway** in a gate wall onto the far rim. |
+| **Bat's route** | A rock shelf along the right wall, with a ramp up at the start, to **his own doorway** in the gate wall. A 10 m gap near the end is spanned by a **drawbridge** that **Saraa's switch** on the far rim lowers. |
+| **Bat's shooting spots** | Target 1 from the start area or the ledge. The arch targets from his shelf underneath them. **Target 4 and the echo platform only from further along his shelf:** the arch's back curtain hides target 4 from the start area (tested), and the echo platform is beyond bow range from there. |
+| **Respawn** | Falling into the chasm sends Saraa back to the start of it, on The Climb's ledge. Bat goes back to the start of his shelf. These are realm-specific checkpoints (`AEchoCheckpoint` gained `bOnlyOneRealm` / `OnlyRealm`). Bat's anchors stay where they are. |
+| **End zone** | Moved to the far rim, past the gate. |
+
+**Stretch goal: the whip lash.**
+- Pressing the whip button with no anchor targeted cracks the whip forward instead.
+- The server sweeps along the lash (4.5 m reach, 0.6 s cooldown).
+- A **training dummy** (`AEchoTrainingDummy`) on the far rim takes the hit. The hit count is replicated, and both players see it wobble and hear it.
+
+**Tuning in Blueprint:**
+- **BP_Saraa → SwordWhip:** whip range, targeting angle, re-latch delay, max swing speed ("swing speed"), latch boost, gravity during swing, air control, min rope length, ground-latch hop, release boost (forward and up), lash range/radius/duration/cooldown, look and sounds.
+- **BP_ThirdPersonCharacter → SpiritBow:** `MaxActiveAnchors` and `AnchorClass`.
+
+**Debug:** type **`EchoWhipDebug`** in the console. It draws:
+- the whip range sphere and targeting cone
+- every anchor target (orange circle) and anchor (yellow = targeted, green = in range, red = out of range)
+- while swinging: the rope, the arc so far, and the predicted arc from here
+- before latching: where a latch now would swing her
+
+It's per machine, and a line on screen says it's on.
+
+**Choices where the brief was open** (simplest option, as asked):
+- **Hold to swing.** The whip button is held while swinging, and letting go (or jumping) releases. Chaining means press, release, press.
+- **Anchor targets are Bat-only.** They're present-day objects, like the canyon echo outlines. Saraa sees the anchors he makes, not the boards.
+- **A new movement component, not a physics constraint,** so the swing gets the engine's client prediction for free.
+- **The whip line is a stretched cylinder,** not the Cable Component plugin. It's always taut while swinging anyway.
+- **The chasm is cut into the landscape.** `build_canyon.py` was re-run with the chasm added. It's deterministic, so every other canyon piece came back identical. `test_canyon_live.py` passes, with two floor-check spots moved out of the chasm.
+- **`bHostPlaysSaraa` / `Echo.HostPlaysSaraa`:** a game-mode switch and console variable that swap roles, so Saraa can be tested as the host.
+
+## How to test
+
+**Just play:** Play (2 players, Listen Server). Do the Spirit Path and The Climb (or drop in with the debug view), then continue past the ledge:
+1. **Bat:** from the ledge or the floor, shoot the target under the overhang ahead. **Saraa:** a blue orb appears. Jump off the ledge toward it, **hold LMB/E/RT** while its brackets show, swing, let go over the pillar.
+2. **Bat:** walk down and up the ramp onto the shelf along the right wall. Standing under the arch, shoot both targets on its underside (the first anchor disappears: only two at a time). **Saraa:** jump off the pillar, latch the first arch anchor, let go near the top of the swing, latch the second, let go over pillar 2.
+3. **Bat:** further along the shelf, shoot the overhang target and the gold outline in front of the gate wall's small doorway. **Saraa:** swing onto the blue platform, jump up through the doorway, drop down and step on the amber switch.
+4. **Bat:** cross the lowered drawbridge and go through his doorway. Both stand in the green end zone.
+5. **Saraa:** press the whip button with no anchor in view (or near the dummy) to lash the training dummy.
+
+**Automated (editor open):**
+- **Run it:** start a fresh 2-player PIE session, then run `py exec(open(r'D:/Creating games in term 4/My Own games/OurLastEcho/OurLastEcho/Scripts/test_crossing_live.py').read())`. That's 68 `ECHO_CROSS_TEST` checks, last line `PASS`/`FAIL`, about 90 s.
+- **Options:** set these before exec'ing, e.g. `py ECHO_CROSS_MODE="host_saraa"`.
+  - `ECHO_CROSS_MODE`: `swing1`, `chain`, `swing3`, `host_saraa`
+  - `ECHO_CROSS_NETEMU=["NetEmulation.PktLag 100", "NetEmulation.PktLagVariance 30", "NetEmulation.PktLoss 5"]`
+  - `ECHO_CROSS_TRACE=True`
+- **Saraa as host:** type `Echo.HostPlaysSaraa 1` in the console before starting PIE, then use mode `host_saraa`. Set it back to 0 afterwards.
+- **Real swings:** on Saraa's own machine the test holds movement input, jumps, aims the camera, presses the whip, and lets go when the predicted landing is on the target, like a player. Every landing is checked on the server.
+- **Frame rate:** before running, turn off *Use Less CPU when in Background* (Editor Preferences → Performance, or the MCP `ObjectTools.set_properties` call in CLAUDE.md). It resets on every editor start. Otherwise a background editor runs at ~3 fps with two PIE worlds, and scripted input that coarse isn't meaningful.
+
+**Rebuilding** (resets hand edits to those actors):
+1. `build_sword_whip.py`: assets; can run headless.
+2. `build_canyon.py`: the chasm; open editor only.
+3. `build_climb.py`.
+4. `build_crossing.py`: moves the end zone to the far rim, so run it after `build_climb.py`.
+5. `build_canyon_rocks.py`.
+
+## Results
+
+**All suites pass:**
+
+| Suite | Checks |
+|---|---|
+| Milestone 1 | 29/29 |
+| Milestone 2 | 34/34 |
+| Milestone 3 | 60/60 |
+| Settings menu | 17/17 |
+| The Crossing | 68/68 |
+| The Crossing with Saraa as host | 39/39 |
+
+Editor and game builds: 0 warnings. Details are in TEST_REPORT.md.
+
+**Bugs and design problems the tests caught (all fixed):**
+1. **Swings drifted sideways off the pillars** in the first runs. The test steered along the canyon's centreline, but the left wall bends 12° away from it there. It now steers along Saraa's line, like a player.
+2. **The arch's front rock curtain blocked Saraa's own view** of the first arch anchor from pillar 1, so her whip had nothing to latch onto. It was removed; the back curtain stays.
+3. **Target 3 sat right where the first arch swing tops out,** so the second swing had no arc. The arch was lengthened, target 3 moved 6 m on, pillar 2 moved back, and target 4 moved out.
+4. **Momentum was lost on release.** The template's falling braking cut her to walking speed in a fraction of a second. Flights from a swing are no longer braked.
+5. **Too much energy:** pumping with the stick (air control 700) plus a 26 m/s cap let one arch anchor fling her past the chained swing. Retuned to air control 300, cap 16 m/s, boosts 250, with the arch curtain as a physical block. The test proves no single-anchor release reaches pillar 2 (best: 1.9 m short).
+6. **Bat stuck in his doorway:** the far rim's slope is ~70 cm higher than the shelf there. The shelf and sill were raised to that ground, with a ramp at the start.
+7. **Engine crash (not ours):** one editor crash in the engine's derived-data cache HTTP code while PIE started. Restarting fixed it.
+
+## Known issues
+
+- **Needs a manual check: real controls and feel.**
+  - Whip input is verified: IA_Whip is on LMB, E and the right trigger, and the component binds it. Every path is driven through the same functions the bindings call.
+  - Nobody has pressed a real button yet. Worth feeling: the 40° targeting cone (anchors are high above, so she may need to look up; widen `TargetingAngle` if it's fiddly), swing speed, and release timing.
+- **Needs a manual check: the lash from Saraa's client.** The lash is a server RPC from her machine, which editor Python can't send (same reason as Milestone 3's debug command). The test drives it on the server's copy of her, which covers the hit, replication and cooldown. Pressing the button in Saraa's window once confirms the RPC.
+- **How Saraa's swing looks on Bat's screen** hasn't been measured. It uses the engine's standard smoothing for other players' characters, which extrapolates in straight lines between updates. At high ping her arc may look slightly less round to Bat than to her.
+- **A perfect fling might skip the echo platform.** Her doorway's sill is 90 cm above the platform, so she'd have to fly into a 3 × 2.6 m window. Not seen in testing, but not impossible.
+- **The whip line can pass through the arch's back curtain** for a moment during the second arch swing. It's only a visual; nothing collides with the line.
+- **Arch targets can also be shot from the start area** (only target 4 and the echo platform need the shelf). A front curtain would fix it, but it blocked Saraa (see *Results*).
+- **Colours:** the whip line was toned down (glow 1.4 → 0.8) after a screenshot showed it near-white in the canyon's auto-exposure. It still reads very pale. Tune `MI_WhipLine` / `MI_SpiritAnchor` by eye.
+- **Per-player volume** (from Milestone 3) is still a to-do.
+- **Two editor settings reset on every start:** frame rate with the editor in the background (see *How to test*), and the Lumen warning shown in PIE windows.
+
+## Suggestions for Milestone 5
+
+- **Swing animation:** a hanging pose and arm raised to the whip (Control Rig or a simple montage), a whip-crack effect, and a rope that sags when slack (Cable Component, or a few sagging segments).
+- **Readability:** a faint trajectory preview while holding the whip button over a gap (the debug arc, made pretty), and a subtle ring showing whip range on anchors in view.
+- **Anchor variety:** anchors that break after one swing, moving anchors (a swinging log Bat shoots), and timed anchors (fading like timed echo platforms).
+- **Physical-material anchors:** switch `CanHoldAnchor` to a "Soft Rock" or "Old Wood" physical material and paint whole walls anchorable instead of placing boards.
+- **Combat groundwork:** turn the training-dummy hit into a small damage interface (`IEchoLashable`) and add a first spirit enemy that only Saraa can hit and only Bat can see coming.
+- **Co-op communication:** a ping/marker, now more needed, since Bat has to tell Saraa where he's putting anchors and she can't see the targets.
+
+---
 # Milestone 3 – The spirit bow and echo platforms
 
 Branch: `milestone-3-spirit-bow`, branched from `main` after Milestone 2 was merged. Built with the editor open, driving it through its MCP server.
