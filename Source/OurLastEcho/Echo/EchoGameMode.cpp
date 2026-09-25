@@ -9,6 +9,12 @@
 #include "EchoHUD.h"
 #include "OurLastEcho.h"
 
+namespace
+{
+	/** Testing: the host plays Saraa (same as BP_EchoGameMode.bHostPlaysSaraa, but settable from the console before starting PIE) */
+	TAutoConsoleVariable<bool> CVarEchoHostPlaysSaraa(TEXT("Echo.HostPlaysSaraa"), false, TEXT("If true, the first player (the listen-server host) plays Saraa and the joiner plays Bat."));
+}
+
 AEchoGameMode::AEchoGameMode()
 {
 	GameStateClass = AEchoGameState::StaticClass();
@@ -23,7 +29,8 @@ UClass* AEchoGameMode::GetDefaultPawnClassForController_Implementation(AControll
 		FirstController = InController;
 	}
 
-	const bool bIsBat = (FirstController.Get() == InController) != bHostPlaysSaraa;
+	const bool bSwapRoles = bHostPlaysSaraa || CVarEchoHostPlaysSaraa.GetValueOnGameThread();
+	const bool bIsBat = (FirstController.Get() == InController) != bSwapRoles;
 	const TSubclassOf<APawn> PawnClass = bIsBat ? BatPawnClass : SaraaPawnClass;
 
 	if (!PawnClass)

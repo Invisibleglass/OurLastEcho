@@ -28,6 +28,8 @@ class UStaticMeshComponent;
  *  with a snap, and she swings under it like a pendulum (UEchoCharacterMovementComponent's swing mode).
  *  Release (let go of the whip button, or press jump): she launches forward with her momentum plus a
  *  small boost, and can latch onto another anchor mid-air to chain swings.
+ *  Lash (the whip button with no anchor targeted): the whip cracks forward; the server sweeps along it and a
+ *  training dummy it meets takes a hit (AEchoTrainingDummy). Groundwork for combat.
  *
  *  The swing itself is predicted movement (see UEchoCharacterMovementComponent). This component handles
  *  input, targeting, the look (a placeholder sword on her hip, and the whip line while swinging) and cues.
@@ -125,10 +127,26 @@ public:
 
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Sound")
 	TSoftObjectPtr<USoundBase> ReleaseSound;
-
-	/** Played when the whip button finds nothing to latch onto */
+	/** Played with the whip lash (the whip button with no anchor to latch onto) */
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Sound")
-	TSoftObjectPtr<USoundBase> MissSound;
+	TSoftObjectPtr<USoundBase> LashSound;
+
+	// ---- Lash (groundwork for combat): the whip button with no anchor targeted lashes forward
+
+	/** How far the lash reaches, in cm */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Lash", meta = (ClampMin = 50))
+	float LashRange = 450.0f;
+
+	/** Thickness of the lash's hit sweep, in cm */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Lash", meta = (ClampMin = 1))
+	float LashRadius = 35.0f;
+
+	/** Seconds the lash takes to crack out and back */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Lash", meta = (ClampMin = 0.05))
+	float LashDuration = 0.3f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Lash", meta = (ClampMin = 0))
+	float LashCooldown = 0.6f;
 
 public:
 
@@ -160,6 +178,18 @@ public:
 	/** Whip button released: let go */
 	UFUNCTION(BlueprintCallable, Category="Sword Whip")
 	void ReleaseWhip();
+
+	/** Lashes the whip forward (where the camera looks). Call on the owning client (or the host's own character). False while cooling down */
+	UFUNCTION(BlueprintCallable, Category="Sword Whip|Lash")
+	bool Lash();
+
+	/** Lashes in a given direction (Lash uses the camera's). On the server it also does the hit */
+	UFUNCTION(BlueprintCallable, Category="Sword Whip|Lash")
+	bool LashInDirection(FVector Direction);
+
+	/** Lashes the server has done for this character (for tests) */
+	UFUNCTION(BlueprintPure, Category="Sword Whip|Lash")
+	int32 GetLashCount() const { return LashCount; }
 
 	/** Called by the character from SetupPlayerInputComponent */
 	void SetupPlayerInput(UEnhancedInputComponent* Input);
@@ -216,6 +246,28 @@ protected:
 	/** Bumped by the server on every latch, so the other player's machine plays the snap too */
 	UPROPERTY(ReplicatedUsing = OnRep_LatchCount)
 	int32 LatchCount = 0;
+
+	UFUNCTION(Server, Reliable)
+	void ServerLash(FVector_NetQuantizeNormal Direction);
+
+	/** Server: counts the lash, replicates it for the look, and sweeps for things to hit */
+	void DoLash(const FVector& Direction);
+
+	/** The lash's look on this machine */
+	void StartLashLook(const FVector& Direction);
+
+	UFUNCTION()
+	void OnRep_LashCount();
+
+	UPROPERTY(ReplicatedUsing = OnRep_LashCount)
+	int32 LashCount = 0;
+
+	UPROPERTY(Replicated)
+	FVector_NetQuantizeNormal LashDirection;
+
+	float LashRemaining = 0.0f;
+	FVector LashLookDirection = FVector::ForwardVector;
+	float LastLashTime = -1000.0f;
 
 	TWeakObjectPtr<AEchoAnchorPoint> HighlightedAnchor;
 	TWeakObjectPtr<AEchoAnchorPoint> LastReleasedAnchor;

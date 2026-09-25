@@ -277,16 +277,17 @@ def scenario():
     feet = bat.get_actor_location().z - HALF_HEIGHT
     check(walked and abs(feet - ledge_top) < 40, f"Bat walks up the ramp onto the ledge (feet {feet:.0f}, ledge {ledge_top:.0f})")
 
-    # ---------------------------------------------------------------- the end zone on the ledge
+    # ---------------------------------------------------------------- the end zone (on the ledge; since Milestone 4, past it on The Crossing's far rim)
     zone = by_label(server, unreal.EchoEndZone, "EndZone")[0]
     z = zone.get_actor_location()
     state_s, state_c = gs.get_game_state(server), gs.get_game_state(client)
-    check(abs(z.z - ledge_top) < 5, f"the end zone is on the ledge ({z.z:.0f})")
+    zone_s = G["station_of"](z.x, z.y)[0]
+    check(abs(z.z - ledge_top) < 5 or zone_s > L["ledge_s1"], f"the end zone is at the end of the level: on the ledge, or past it since Milestone 4 (station {zone_s:.0f}, height {z.z:.0f})")
     check(not state_s.is_milestone_complete(), "not complete before both are in the end zone")
     drop(bat, z.x - 150, z.y, z.z)
     drop(saraa, z.x + 150, z.y, z.z)
     yield 0.6
-    check(state_s.is_milestone_complete() and state_c.is_milestone_complete(), "both players in the end zone on the ledge completes it (both machines)")
+    check(state_s.is_milestone_complete() and state_c.is_milestone_complete(), "both players in the end zone completes it (both machines)")
 
     # ---------------------------------------------------------------- checkpoint at the climb base
     cp = by_label(server, unreal.EchoCheckpoint, "Climb_Checkpoint")[0]

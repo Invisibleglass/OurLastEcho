@@ -13,7 +13,7 @@ Builds Milestone 4's level section, "The Crossing", into /Game/Echo/Maps/Lvl_Spi
   - BAT'S ROUTE: a rock SHELF along the right wall, all the way to his own doorway in the gate wall, broken by a gap
     near the end. Saraa's SWITCH on the far rim lowers a DRAWBRIDGE over it.
   - CHECKPOINTS at the start of each route (realm-specific), a KILL VOLUME in the chasm, and the END ZONE moved to
-    the far rim.
+    the far rim, and a TRAINING DUMMY there for the whip lash (stretch goal).
 
 Only actors tagged CrossingBuilder are deleted and rebuilt, plus the EndZone is moved (the brief allows that). Run
 build_canyon.py first (it cuts the chasm), then build_climb.py, then this, then build_canyon_rocks.py.
@@ -75,6 +75,7 @@ SHELF = dict(r0=-300, r1=450, ramp=700, s0=CHASM_S0 - 50, s1=CHASM_S1 + 10, gap_
 BRIDGE = dict(r=250, width=400, thickness=40)
 
 SWITCH = dict(s=15900, u=1400)    # a few metres aside from where she drops out of her doorway
+DUMMY = dict(s=15900, u=2800)     # stretch goal: a training dummy for the whip lash, on the far rim
 END_ZONE = dict(s=16400)
 KILL_VOLUME = dict(lo=(6000, -2600, -1500), hi=(17300, 8000, -300))
 CHECKPOINT_SARAA = dict(s0=7050, s1=7770, u0=-300, u1=1000, respawn_s=7500, respawn_u=450)
@@ -279,6 +280,10 @@ def build_gameplay(top, rock):
     sx, sy = left_xy(SWITCH["s"], SWITCH["u"])
     switch = spawn(unreal.EchoSpiritSwitch, (sx, sy, ground_at(sx, sy)), (0.0, wall_yaw(SWITCH["s"]), 0.0), "Crossing_Switch", "Crossing/Gameplay")
     switch.set_editor_property("target_bridge", bridge)
+
+    # Training dummy for the whip lash, facing back towards the chasm
+    dx, dy = left_xy(DUMMY["s"], DUMMY["u"])
+    spawn(unreal.EchoTrainingDummy, (dx, dy, ground_at(dx, dy)), (0.0, wall_yaw(DUMMY["s"]) + 180.0, 0.0), "Crossing_TrainingDummy", "Crossing/Gameplay")
 
     # A low step inside Saraa's doorway down to the far rim is not needed: she simply drops ~5 m
 

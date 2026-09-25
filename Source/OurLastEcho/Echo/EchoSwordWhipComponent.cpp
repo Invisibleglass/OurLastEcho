@@ -21,6 +21,7 @@
 #include "EchoAnchorPoint.h"
 #include "EchoAnchorTarget.h"
 #include "EchoCharacterMovementComponent.h"
+#include "EchoTrainingDummy.h"
 #include "EchoTypes.h"
 #include "OurLastEcho.h"
 #include "OurLastEchoCharacter.h"
@@ -61,7 +62,7 @@ UEchoSwordWhipComponent::UEchoSwordWhipComponent()
 	SwordMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_SpiritSword.MI_SpiritSword")));
 	WhipLineMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_WhipLine.MI_WhipLine")));
 	ReleaseSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Engine/VREditor/Sounds/VR_ungrab_Cue.VR_ungrab_Cue")));
-	MissSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Engine/VREditor/Sounds/VR_click3_Cue.VR_click3_Cue")));
+	LashSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Engine/VREditor/Sounds/VR_click3_Cue.VR_click3_Cue")));
 }
 
 AOurLastEchoCharacter* UEchoSwordWhipComponent::GetCharacter() const
@@ -211,10 +212,8 @@ bool UEchoSwordWhipComponent::PressWhip()
 	}
 	if (!Target)
 	{
-		if (USoundBase* Sound = MissSound.LoadSynchronous())
-		{
-			UGameplayStatics::PlaySoundAtLocation(this, Sound, Character->GetActorLocation(), 0.5f, 0.8f);
-		}
+		// Nothing to latch onto: lash forward instead
+		Lash();
 		return false;
 	}
 
@@ -222,6 +221,100 @@ bool UEchoSwordWhipComponent::PressWhip()
 	const FVector Point = Target->GetSwingPoint();
 	Movement->RequestSwing(Point, FVector::Dist(Character->GetActorLocation(), Point));
 	return true;
+}
+
+bool UEchoSwordWhipComponent::Lash()
+{
+	FVector ViewLocation;
+	FVector ViewDirection;
+	GetView(ViewLocation, ViewDirection);
+	return LashInDirection(ViewDirection);
+}
+
+bool UEchoSwordWhipComponent::LashInDirection(FVector Direction)
+{
+	if (!CanUseWhip() || IsSwinging())
+	{
+		return false;
+	}
+
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastLashTime < LashCooldown)
+	{
+		return false;
+	}
+	LastLashTime = Now;
+
+	// Mostly level: a lash is a horizontal crack, whatever the camera pitch
+	Direction.Z = FMath::Clamp(Direction.Z, -0.3f, 0.3f);
+	Direction = Direction.GetSafeNormal(UE_SMALL_NUMBER, GetOwner()->GetActorForwardVector());
+
+	StartLashLook(Direction);
+	if (GetOwner()->HasAuthority())
+	{
+		DoLash(Direction);
+	}
+	else
+	{
+		ServerLash(Direction);
+	}
+	return true;
+}
+
+void UEchoSwordWhipComponent::ServerLash_Implementation(FVector_NetQuantizeNormal Direction)
+{
+	// Same cooldown as the owner, with some slack for network timing
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!CanUseWhip() || IsSwinging() || Now - LastLashTime < LashCooldown * 0.8f)
+	{
+		return;
+	}
+	LastLashTime = Now;
+	DoLash(Direction);
+}
+
+void UEchoSwordWhipComponent::DoLash(const FVector& Direction)
+{
+	AOurLastEchoCharacter* Character = GetCharacter();
+	++LashCount;
+	LashDirection = Direction;
+
+	// The server's own view of a remote Saraa (the owner already shows it)
+	if (!Character->IsLocallyControlled())
+	{
+		StartLashLook(Direction);
+	}
+
+	// Sweep along the lash from her chest; the first thing it meets takes the hit
+	const FVector Start = Character->GetActorLocation() + FVector(0.0f, 0.0f, 40.0f);
+	const FVector End = Start + Direction * LashRange;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SwordWhipLash), false, Character);
+	FHitResult Hit;
+	if (GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(LashRadius), Params))
+	{
+		if (AEchoTrainingDummy* Dummy = Cast<AEchoTrainingDummy>(Hit.GetActor()))
+		{
+			Dummy->ReceiveLash(Character, Direction);
+		}
+	}
+}
+
+void UEchoSwordWhipComponent::StartLashLook(const FVector& Direction)
+{
+	LashRemaining = LashDuration;
+	LashLookDirection = Direction;
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		if (USoundBase* Sound = LashSound.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, Sound, GetOwner()->GetActorLocation(), 0.7f, 0.9f);
+		}
+	}
+}
+
+void UEchoSwordWhipComponent::OnRep_LashCount()
+{
+	StartLashLook(LashDirection);
 }
 
 void UEchoSwordWhipComponent::ReleaseWhip()
@@ -439,7 +532,10 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 		Anchor = Movement->GetSwingAnchor();
 	}
 
-	if (!bShow)
+	LashRemaining = FMath::Max(0.0f, LashRemaining - DeltaTime);
+	const bool bLashing = !bShow && LashRemaining > 0.0f;
+
+	if (!bShow && !bLashing)
 	{
 		if (bLineShown)
 		{
@@ -451,14 +547,23 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 	}
 	bLineShown = true;
 
-	// Sword raised at the shoulder, pointing at the anchor; the line runs from its tip
+	// Sword raised at the shoulder, pointing at the anchor (or along the lash); the line runs from its tip
 	const FVector Hand = Character->GetActorTransform().TransformPosition(HeldLocation);
-	const FVector ToAnchor = (Anchor - Hand).GetSafeNormal();
-	SwordRoot->SetWorldLocationAndRotation(Hand, FRotationMatrix::MakeFromZ(ToAnchor).Rotator());
+	const FVector Direction = bLashing ? LashLookDirection : (Anchor - Hand).GetSafeNormal();
+	SwordRoot->SetWorldLocationAndRotation(Hand, FRotationMatrix::MakeFromZ(Direction).Rotator());
 
-	LineExtend = FMath::Min(1.0f, LineExtend + DeltaTime / WhipExtendTime);
-	const FVector Tip = Hand + ToAnchor * SwordTipZ;
-	const FVector End = FMath::Lerp(Tip, Anchor, LineExtend);
+	const FVector Tip = Hand + Direction * SwordTipZ;
+	FVector End;
+	if (bLashing)
+	{
+		// Cracks out to full reach and snaps back
+		End = Tip + Direction * LashRange * FMath::Sin(PI * (1.0f - LashRemaining / LashDuration));
+	}
+	else
+	{
+		LineExtend = FMath::Min(1.0f, LineExtend + DeltaTime / WhipExtendTime);
+		End = FMath::Lerp(Tip, Anchor, LineExtend);
+	}
 	const FVector Span = End - Tip;
 	const float Length = Span.Size();
 	if (Length < 1.0f)
@@ -572,4 +677,6 @@ void UEchoSwordWhipComponent::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, bLatched, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, LatchedAnchor, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, LatchCount, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, LashCount, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, LashDirection, COND_SkipOwner);
 }

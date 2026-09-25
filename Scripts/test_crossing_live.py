@@ -29,6 +29,8 @@ G = X["G"]
 MODE = globals().get("ECHO_CROSS_MODE", "full")
 REPEATS = globals().get("ECHO_CROSS_REPEATS", 3)
 TRACE = globals().get("ECHO_CROSS_TRACE", False) or MODE == "swing3"
+# e.g. ["NetEmulation.PktLag 60", "NetEmulation.PktLoss 3"]; turned off again at the end
+NETEMU = globals().get("ECHO_CROSS_NETEMU", [])
 
 gs = unreal.GameplayStatics
 T = {"failures": 0, "checks": 0, "wait": 0.0, "elapsed": 0.0, "handle": None, "gen": None}
@@ -357,6 +359,15 @@ def scenario():
     saraa_view_world = server if host_saraa else client
     bat_view_world = client if host_saraa else server
     log(f"mode {MODE}; Saraa is the {'HOST' if host_saraa else 'client'}")
+
+    if NETEMU:
+        # Unreal's packet simulation (console variables, so both PIE players' connections get it)
+        for cmd in NETEMU:
+            unreal.SystemLibrary.execute_console_command(server, cmd)
+        yield 4.0
+        for label, world in (("host", server), ("client", client)):
+            ps = gs.get_player_controller(world, 0).player_state
+            log(f"network emulation {NETEMU}: {label} player ping {ps.get_ping_in_milliseconds():.0f} ms")
     if MODE == "host_saraa":
         check(host_saraa, "Saraa is the listen-server host (BP_EchoGameMode.bHostPlaysSaraa)")
 
@@ -599,6 +610,61 @@ def scenario():
           f"Saraa falling into the chasm respawns at its start, on the ledge (station {s_r:.0f}, feet {feet(saraa):.0f})")
     check(len(anchors(server)) == n_before and len(anchors(client)) == n_before, f"Bat's anchors stay in place ({n_before})")
 
+    # ---------------------------------------------------------------- Bat's third arrow removes the anchor she hangs from
+    a1 = yield from shoot_target(T1, lip, "target 1 once more")
+    a1_local = anchor_near(saraa_view_world, a1.get_swing_point()) if a1 else None
+    if a1_local:
+        local = S["saraa_local"]
+        lmove = local.get_movement_component()
+        stand(saraa, left_point(7700, 600, ledge_top), G["centre_yaw"](7700))
+        yield 1.6
+        aim_at(local, a1_local.get_swing_point())
+        yield 0.2
+        local.jump()
+        yield 0.3
+        local.get_editor_property("sword_whip").press_whip()
+        yield 0.4
+        hanging = lmove.is_swinging()
+        lmove.reset_correction_stats()
+        yield from shoot_target(T2, under_arch, "target 2 while she hangs")
+        yield from shoot_target(T3, under_arch, "target 3 while she hangs")
+        yield 0.8
+        gone = anchor_near(server, a1_local.get_swing_point()) is None
+        check(hanging and gone and not lmove.is_swinging() and not saraa.get_movement_component().is_swinging(),
+              f"when Bat's arrows remove the anchor she hangs from, she drops on both machines "
+              f"(was swinging {hanging}, anchor gone {gone}; {lmove.get_num_client_corrections()} corrections, largest {lmove.get_max_correction_distance():.0f} cm)")
+        local.get_editor_property("sword_whip").release_whip()
+        yield 3.0
+
+    # ---------------------------------------------------------------- stretch goal: whip lash on the training dummy
+    dummies = by_label(server, unreal.EchoTrainingDummy, "Crossing_TrainingDummy")
+    if check(len(dummies) == 1, "a training dummy stands on the far rim"):
+        dummy = dummies[0]
+        dummy_c = by_label(client, unreal.EchoTrainingDummy, "Crossing_TrainingDummy")[0]
+        d = dummy.get_actor_location()
+        toward = v(d.x, d.y, 0) - v(zl.x, zl.y, 0)
+        stand(saraa, v(d.x, d.y, d.z) - toward.normal() * 250 + v(0, 0, 0), None)
+        yield 1.0
+        whip_srv = saraa.get_editor_property("sword_whip")
+        before = (dummy.get_hit_count(), dummy_c.get_local_hit_reactions())
+        # The server copy of Saraa does the hit (editor Python can't send her client's server RPC; see TEST_REPORT)
+        away = whip_srv.lash_in_direction(toward * -1.0)
+        yield 0.8
+        check(away and dummy.get_hit_count() == before[0], "a lash away from the dummy misses it")
+        hit = whip_srv.lash_in_direction(toward)
+        again = whip_srv.lash_in_direction(toward)
+        yield 0.8
+        check(hit and not again, "the lash has a cooldown")
+        check(dummy.get_hit_count() == before[0] + 1 and dummy_c.get_hit_count() == before[0] + 1 and dummy_c.get_local_hit_reactions() > before[1],
+              f"a lash at the dummy hits it, and both machines see the hit ({dummy.get_hit_count()} / {dummy_c.get_hit_count()} hits)")
+        check(not bat.get_editor_property("sword_whip").lash_in_direction(toward), "Bat can't lash")
+
+    # ---------------------------------------------------------------- input assets
+    imc = unreal.load_asset("/Game/Input/IMC_Whip.IMC_Whip")
+    keys = sorted(str(m.get_editor_property("key").get_editor_property("key_name")) for m in imc.get_editor_property("default_key_mappings").get_editor_property("mappings")
+                  if m.get_editor_property("action").get_name() == "IA_Whip")
+    check(keys == ["E", "Gamepad_RightTrigger", "LeftMouseButton"], f"IMC_Whip maps the whip to mouse, keyboard and gamepad ({keys})")
+
     # ---------------------------------------------------------------- debug command
     unreal.SystemLibrary.execute_console_command(server, "EchoWhipDebug")
     yield 0.3
@@ -632,6 +698,8 @@ def finish():
     unreal.unregister_slate_post_tick_callback(T["handle"])
     if S.get("server"):
         unreal.SystemLibrary.execute_console_command(S["server"], "r.ScreenPercentage 100")
+        for cmd in NETEMU:
+            unreal.SystemLibrary.execute_console_command(S["server"], cmd.split()[0] + " 0")
     for label, n, worst, total in S.get("corrections", []):
         log(f"network: {label}: {n} corrections, largest {worst:.1f} cm, total {total:.0f} cm")
     log(f"{T['checks']} checks in {T['elapsed']:.0f}s")
