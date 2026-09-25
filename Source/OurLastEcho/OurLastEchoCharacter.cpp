@@ -13,8 +13,11 @@
 #include "OurLastEcho.h"
 #include "EchoGameState.h"
 #include "EchoSpiritBowComponent.h"
+#include "EchoSwordWhipComponent.h"
+#include "EchoCharacterMovementComponent.h"
 
-AOurLastEchoCharacter::AOurLastEchoCharacter()
+AOurLastEchoCharacter::AOurLastEchoCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UEchoCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -49,6 +52,7 @@ AOurLastEchoCharacter::AOurLastEchoCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 
 	SpiritBow = CreateDefaultSubobject<UEchoSpiritBowComponent>(TEXT("SpiritBow"));
+	SwordWhip = CreateDefaultSubobject<UEchoSwordWhipComponent>(TEXT("SwordWhip"));
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
@@ -94,6 +98,7 @@ void AOurLastEchoCharacter::RespawnAtStart()
 		return;
 	}
 
+	GetEchoMovement()->CancelSwing();
 	GetCharacterMovement()->StopMovementImmediately();
 	TeleportTo(RespawnTransform.GetLocation(), RespawnTransform.Rotator(), false, true);
 }
@@ -110,6 +115,16 @@ void AOurLastEchoCharacter::EchoShowAllPlatforms()
 {
 	const AEchoGameState* GameState = GetWorld()->GetGameState<AEchoGameState>();
 	RequestShowAllPlatforms(!(GameState && GameState->IsDebugShowAllPlatforms()));
+}
+
+void AOurLastEchoCharacter::EchoWhipDebug()
+{
+	UEchoSwordWhipComponent::ToggleDebugDraw();
+}
+
+UEchoCharacterMovementComponent* AOurLastEchoCharacter::GetEchoMovement() const
+{
+	return CastChecked<UEchoCharacterMovementComponent>(GetCharacterMovement());
 }
 
 void AOurLastEchoCharacter::RequestShowAllPlatforms(bool bShow)
@@ -151,6 +166,9 @@ void AOurLastEchoCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 
 		// Spirit bow (only binds for Bat)
 		SpiritBow->SetupPlayerInput(EnhancedInputComponent);
+
+		// Sword whip (only binds for Saraa)
+		SwordWhip->SetupPlayerInput(EnhancedInputComponent);
 	}
 	else
 	{

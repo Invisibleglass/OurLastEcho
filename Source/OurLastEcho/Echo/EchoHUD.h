@@ -35,6 +35,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Echo|Reticle")
 	float ReticleGap = 5.0f;
 
+	/** Brackets around the anchor Saraa's whip is targeting */
+	UPROPERTY(EditDefaultsOnly, Category="Echo|Whip")
+	FLinearColor WhipMarkerColor = FLinearColor(0.35f, 0.65f, 1.0f, 0.95f);
+
+	/** Half-size of the whip target brackets, in pixels */
+	UPROPERTY(EditDefaultsOnly, Category="Echo|Whip")
+	float WhipMarkerSize = 22.0f;
+
 public:
 
 	virtual void DrawHUD() override;
@@ -42,6 +50,8 @@ public:
 protected:
 
 	void DrawReticle();
+
+	void DrawWhipTarget();
 
 	/** While paused, tells the player who DIDN'T open the menu who did */
 	void DrawPausedBanner();

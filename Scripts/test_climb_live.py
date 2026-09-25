@@ -88,9 +88,12 @@ def scenario():
 
     # ---------------------------------------------------------------- the bow belongs to Bat
     check(bat_bow.can_use_bow() and not saraa_bow.can_use_bow(), "only Bat can use the spirit bow")
-    bat_parts = len(bat.get_components_by_class(unreal.StaticMeshComponent))
-    saraa_parts = len(saraa.get_components_by_class(unreal.StaticMeshComponent))
-    check(bat_parts - saraa_parts == 6, f"Bat carries the 6-part placeholder bow, Saraa doesn't ({bat_parts} vs {saraa_parts} mesh components)")
+    def bow_parts(character):
+        # Meshes under the bow's root (Saraa carries other meshes since Milestone 4: her sword whip)
+        return sum(1 for c in character.get_components_by_class(unreal.StaticMeshComponent)
+                   if c.get_attach_parent() and c.get_attach_parent().get_name() == "SpiritBowRoot")
+    bat_parts, saraa_parts = bow_parts(bat), bow_parts(saraa)
+    check(bat_parts == 6 and saraa_parts == 0, f"Bat carries the 6-part placeholder bow, Saraa doesn't ({bat_parts} vs {saraa_parts} bow parts)")
     check(saraa_bow.fire_at(bat.get_actor_location()) is None, "the server refuses to fire Saraa's bow")
 
     imc = unreal.load_asset("/Game/Input/IMC_Bow.IMC_Bow")   # EditorAssetLibrary refuses to run during PIE

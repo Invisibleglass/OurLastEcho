@@ -95,3 +95,17 @@ Run on branch `milestone-3-spirit-bow` straight after branching from `main`, in 
 | Settings menu pauses both players, volume can be turned down | ✅ Pass (logic) / ⚠️ keys and Saraa's side need a manual test | `test_menu_live.py` 17/17: both machines pause, movement and the timed countdown freeze, it stays paused until both players close their menus, both resume, the volume is saved and clamped, and the input assets are correct. The "Paused - Bat is in the settings menu" banner on Saraa's screen and the menu layout were checked in screenshots. |
 
 **Totals:** Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, settings menu 17/17.
+## Milestone 4: baseline before starting, then results
+
+### Baseline (start of Milestone 4, before any changes)
+
+Run on branch `milestone-4-sword-whip` straight after branching from `main` (Milestone 3 already merged), each in a fresh 2-player listen-server PIE session:
+
+| Test | Result |
+|---|---|
+| `test_pie_live.py` (Milestone 1 mechanics) | ✅ Pass, 29/29 |
+| `test_canyon_live.py` (Milestone 2 canyon) | ✅ Pass, 34/34 |
+| `test_climb_live.py` (Milestone 3 bow, echo platforms, The Climb) | ✅ Pass, 60/60 |
+| `test_menu_live.py` (settings / pause menu) | ✅ Pass, 17/17 |
+
+Straight after the new movement component went in (both characters now use `UEchoCharacterMovementComponent`), `test_pie_live.py` and `test_climb_live.py` (which makes real jumps on Saraa's client) were run again and still pass. The Climb test's bow check now counts only the bow's own parts, because Saraa carries a sword now.

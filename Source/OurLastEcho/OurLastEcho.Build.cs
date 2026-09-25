@@ -13,6 +13,7 @@ public class OurLastEcho : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
+			"NetCore",
 			"EnhancedInput",
 			"AIModule",
 			"StateTreeModule",

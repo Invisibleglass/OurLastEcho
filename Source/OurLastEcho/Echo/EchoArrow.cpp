@@ -11,7 +11,10 @@
 #include "Net/UnrealNetwork.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
+#include "EchoAnchorable.h"
 #include "EchoPlatform.h"
+#include "EchoSpiritBowComponent.h"
+#include "OurLastEchoCharacter.h"
 #include "EchoTypes.h"
 #include "OurLastEcho.h"
 
@@ -47,6 +50,8 @@ AEchoArrow::AEchoArrow()
 	Collision->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 	Collision->SetGenerateOverlapEvents(false);
 	Collision->SetCanEverAffectNavigation(false);
+	// Hits carry the surface's physical material, so UEchoAnchorRules can switch to checking it later
+	Collision->bReturnMaterialOnMove = true;
 	RootComponent = Collision;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
@@ -157,6 +162,7 @@ void AEchoArrow::OnRep_Launch()
 
 void AEchoArrow::OnArrowStop(const FHitResult& ImpactResult)
 {
+	const FVector Direction = GetActorForwardVector();
 	Stick();
 
 	if (GetNetMode() != NM_DedicatedServer)
@@ -179,6 +185,18 @@ void AEchoArrow::OnArrowStop(const FHitResult& ImpactResult)
 	{
 		UE_LOG(LogOurLastEcho, Log, TEXT("%s hit %s"), *GetName(), *Platform->GetName());
 		Platform->Awaken();
+	}
+	else if (UEchoAnchorRules::CanHoldAnchor(ImpactResult))
+	{
+		// The arrow sticks and becomes an anchor point; the anchor shows the stuck arrow from now on
+		const AOurLastEchoCharacter* Archer = Cast<AOurLastEchoCharacter>(GetInstigator());
+		if (UEchoSpiritBowComponent* Bow = Archer ? Archer->GetSpiritBow() : nullptr)
+		{
+			if (Bow->CreateAnchor(ImpactResult, Direction))
+			{
+				SetLifeSpan(AnchoredLifetime);
+			}
+		}
 	}
 }
 

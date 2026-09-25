@@ -6,7 +6,9 @@
 #include "Engine/Font.h"
 #include "Engine/World.h"
 #include "EchoGameState.h"
+#include "EchoAnchorPoint.h"
 #include "EchoSpiritBowComponent.h"
+#include "EchoSwordWhipComponent.h"
 #include "OurLastEchoCharacter.h"
 #include "OurLastEchoPlayerController.h"
 #include "GameFramework/PlayerState.h"
@@ -21,6 +23,12 @@ void AEchoHUD::DrawHUD()
 	}
 
 	DrawReticle();
+	DrawWhipTarget();
+
+	if (UEchoSwordWhipComponent::IsDebugDrawOn())
+	{
+		DrawText(TEXT("DEBUG: whip range, anchors and swing arcs (EchoWhipDebug to turn off)"), FLinearColor(0.5f, 0.8f, 1.0f), 20.0f, 40.0f, GEngine->GetSmallFont(), 1.2f);
+	}
 
 	const AEchoGameState* GameState = GetWorld()->GetGameState<AEchoGameState>();
 	if (!GameState)
@@ -82,6 +90,33 @@ void AEchoHUD::DrawPausedBanner()
 
 	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
 	DrawText(Message, FLinearColor::White, X, Y, Font, 1.5f);
+}
+
+void AEchoHUD::DrawWhipTarget()
+{
+	const AOurLastEchoCharacter* Character = Cast<AOurLastEchoCharacter>(GetOwningPawn());
+	const UEchoSwordWhipComponent* Whip = Character ? Character->GetSwordWhip() : nullptr;
+	const AEchoAnchorPoint* Target = Whip ? Whip->GetHighlightedAnchor() : nullptr;
+	if (!Target || Whip->IsSwinging())
+	{
+		return;
+	}
+
+	// Four blue corner brackets around the anchor the whip would latch onto
+	const FVector Screen = Project(Target->GetSwingPoint(), true);
+	if (Screen.Z <= 0.0f)
+	{
+		return;
+	}
+	const float Half = WhipMarkerSize;
+	const float Arm = WhipMarkerSize * 0.45f;
+	for (const FVector2D Corner : { FVector2D(-1, -1), FVector2D(1, -1), FVector2D(-1, 1), FVector2D(1, 1) })
+	{
+		const float X = Screen.X + Corner.X * Half;
+		const float Y = Screen.Y + Corner.Y * Half;
+		DrawLine(X, Y, X - Corner.X * Arm, Y, WhipMarkerColor, 2.5f);
+		DrawLine(X, Y, X, Y - Corner.Y * Arm, WhipMarkerColor, 2.5f);
+	}
 }
 
 void AEchoHUD::DrawReticle()

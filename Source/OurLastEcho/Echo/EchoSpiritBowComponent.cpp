@@ -17,6 +17,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "EchoAnchorPoint.h"
 #include "EchoArrow.h"
 #include "EchoTypes.h"
 #include "OurLastEcho.h"
@@ -57,6 +58,7 @@ UEchoSpiritBowComponent::UEchoSpiritBowComponent()
 	SetIsReplicatedByDefault(true);
 
 	ArrowClass = AEchoArrow::StaticClass();
+	AnchorClass = AEchoAnchorPoint::StaticClass();
 
 	AimAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Aim.IA_Aim")));
 	FireAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Fire.IA_Fire")));
@@ -343,6 +345,69 @@ AEchoArrow* UEchoSpiritBowComponent::FireAt(FVector TargetPoint)
 
 	LastFireTime = GetWorld()->GetTimeSeconds();
 	return Arrow;
+}
+
+AEchoAnchorPoint* UEchoSpiritBowComponent::CreateAnchor(const FHitResult& Hit, const FVector& ArrowDirection)
+{
+	AOurLastEchoCharacter* Character = GetCharacter();
+	if (!Character || !Character->HasAuthority() || !AnchorClass)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = Character;
+	SpawnParams.Instigator = Character;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AEchoAnchorPoint* Anchor = GetWorld()->SpawnActor<AEchoAnchorPoint>(AnchorClass, Hit.ImpactPoint, ArrowDirection.Rotation(), SpawnParams);
+	if (!Anchor)
+	{
+		return nullptr;
+	}
+	Anchor->InitSurface(Hit.ImpactNormal);
+
+	// Oldest first: past the limit, the oldest anchor goes (and Saraa lets go if she was hanging from it)
+	ActiveAnchors.RemoveAll([](const AEchoAnchorPoint* Existing) { return !IsValid(Existing); });
+	ActiveAnchors.Add(Anchor);
+	while (ActiveAnchors.Num() > FMath::Max(1, MaxActiveAnchors))
+	{
+		AEchoAnchorPoint* Oldest = ActiveAnchors[0];
+		ActiveAnchors.RemoveAt(0);
+		UE_LOG(LogOurLastEcho, Log, TEXT("Spirit bow: too many anchors, removing the oldest (%s)"), *GetNameSafe(Oldest));
+		if (Oldest)
+		{
+			Oldest->Destroy();
+		}
+	}
+
+	UE_LOG(LogOurLastEcho, Log, TEXT("Spirit bow: anchor %s on %s (%d active)"), *Anchor->GetName(), *GetNameSafe(Hit.GetActor()), ActiveAnchors.Num());
+	return Anchor;
+}
+
+void UEchoSpiritBowComponent::ClearAnchors()
+{
+	for (AEchoAnchorPoint* Anchor : ActiveAnchors)
+	{
+		if (IsValid(Anchor))
+		{
+			Anchor->Destroy();
+		}
+	}
+	ActiveAnchors.Reset();
+}
+
+TArray<AEchoAnchorPoint*> UEchoSpiritBowComponent::GetActiveAnchors() const
+{
+	TArray<AEchoAnchorPoint*> Result;
+	for (AEchoAnchorPoint* Anchor : ActiveAnchors)
+	{
+		if (IsValid(Anchor))
+		{
+			Result.Add(Anchor);
+		}
+	}
+	return Result;
 }
 
 void UEchoSpiritBowComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

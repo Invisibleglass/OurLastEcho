@@ -7,7 +7,7 @@
 #include "EchoGameMode.generated.h"
 
 /**
- *  Co-op game mode: the first player to join plays Bat, everyone after plays Saraa.
+ *  Co-op game mode: the first player to join plays Bat, everyone after plays Saraa (swapped with bHostPlaysSaraa).
  *  Pawn and controller classes are assigned in BP_EchoGameMode.
  */
 UCLASS()
@@ -25,8 +25,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Echo")
 	TSubclassOf<APawn> SaraaPawnClass;
 
-	/** Whoever is currently Bat. Cleared automatically if they leave, so the next joiner becomes Bat */
-	TWeakObjectPtr<AController> BatController;
+	/** Swap roles: the first player (the host) plays Saraa and the joiner plays Bat. For testing Saraa as the host */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Echo")
+	bool bHostPlaysSaraa = false;
+
+	/** The first player (the host). Cleared automatically if they leave, so the next joiner takes their role */
+	TWeakObjectPtr<AController> FirstController;
 
 public:
 

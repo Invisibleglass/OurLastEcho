@@ -18,12 +18,12 @@ AEchoGameMode::AEchoGameMode()
 UClass* AEchoGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)
 {
 	// Called more than once per player (start-spot selection and spawning), so this must be idempotent
-	if (!BatController.IsValid())
+	if (!FirstController.IsValid())
 	{
-		BatController = InController;
+		FirstController = InController;
 	}
 
-	const bool bIsBat = BatController.Get() == InController;
+	const bool bIsBat = (FirstController.Get() == InController) != bHostPlaysSaraa;
 	const TSubclassOf<APawn> PawnClass = bIsBat ? BatPawnClass : SaraaPawnClass;
 
 	if (!PawnClass)

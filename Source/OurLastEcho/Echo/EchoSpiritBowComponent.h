@@ -7,6 +7,7 @@
 #include "EchoSpiritBowComponent.generated.h"
 
 class AEchoArrow;
+class AEchoAnchorPoint;
 class AOurLastEchoCharacter;
 class UEnhancedInputComponent;
 class UInputAction;
@@ -23,6 +24,8 @@ class UStaticMeshComponent;
  *  the character faces the aim direction and walks slower.
  *  Fire (LMB / right trigger, while aiming): the SERVER spawns a replicated AEchoArrow on a slight arc
  *  towards what the reticle points at, so both players see it. Unlimited arrows, short cooldown.
+ *  Anchors: an arrow that sticks into an anchorable surface (UEchoAnchorRules) becomes an anchor point for
+ *  Saraa's whip. This component keeps the list (server) and removes the oldest past MaxActiveAnchors.
  *
  *  All tuning values are EditAnywhere/BlueprintReadWrite: select the component on BP_ThirdPersonCharacter.
  */
@@ -57,6 +60,16 @@ public:
 	/** Where arrows leave from, relative to the character (X forward, Y right, Z up) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Arrow")
 	FVector MuzzleOffset = FVector(70.0f, 15.0f, 45.0f);
+
+	// ---- Anchor arrows
+
+	/** What an arrow becomes when it sticks into an anchorable surface */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Anchors")
+	TSubclassOf<AEchoAnchorPoint> AnchorClass;
+
+	/** How many anchor points Bat can have at once. Making one more removes the oldest */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Anchors", meta = (ClampMin = 1))
+	int32 MaxActiveAnchors = 2;
 
 	// ---- Aim tuning
 
@@ -134,6 +147,17 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Spirit Bow")
 	AEchoArrow* FireAt(FVector TargetPoint);
 
+	/** Server: turns an arrow hit on an anchorable surface into an anchor point, removing the oldest if there are too many */
+	AEchoAnchorPoint* CreateAnchor(const FHitResult& Hit, const FVector& ArrowDirection);
+
+	/** Server: removes all of this bow's anchor points */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Spirit Bow|Anchors")
+	void ClearAnchors();
+
+	/** Server: this bow's anchor points, oldest first */
+	UFUNCTION(BlueprintPure, Category="Spirit Bow|Anchors")
+	TArray<AEchoAnchorPoint*> GetActiveAnchors() const;
+
 	/** Called by the character from SetupPlayerInputComponent */
 	void SetupPlayerInput(UEnhancedInputComponent* Input);
 
@@ -178,6 +202,10 @@ protected:
 	float DefaultFieldOfView = 90.0f;
 	float DefaultWalkSpeed = 500.0f;
 	bool bDefaultsCaptured = false;
+
+	/** Server: anchor points made by this bow, oldest first */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AEchoAnchorPoint>> ActiveAnchors;
 
 	UPROPERTY(Transient)
 	TObjectPtr<USceneComponent> BowRoot;

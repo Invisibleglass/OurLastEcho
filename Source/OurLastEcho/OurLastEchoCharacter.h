@@ -13,6 +13,8 @@ class UCameraComponent;
 class UInputAction;
 class UMaterialInterface;
 class UEchoSpiritBowComponent;
+class UEchoSwordWhipComponent;
+class UEchoCharacterMovementComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -37,7 +39,11 @@ class AOurLastEchoCharacter : public ACharacter
 	/** Spirit bow. Every character has one, but only a Living-realm character (Bat) can use it; tune it on BP_ThirdPersonCharacter */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UEchoSpiritBowComponent> SpiritBow;
-	
+
+	/** Sword whip. Every character has one, but only a Spirit-realm character (Saraa) can use it; tune it on BP_Saraa */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UEchoSwordWhipComponent> SwordWhip;
+
 protected:
 
 	/** Jump Input Action */
@@ -69,8 +75,8 @@ protected:
 
 public:
 
-	/** Constructor */
-	AOurLastEchoCharacter();
+	/** Constructor (uses UEchoCharacterMovementComponent, which adds the whip swing) */
+	AOurLastEchoCharacter(const FObjectInitializer& ObjectInitializer);
 
 	/** Returns which realm this character lives in */
 	UFUNCTION(BlueprintPure, Category="Echo")
@@ -93,6 +99,10 @@ public:
 	/** Turns the show-all-platforms debug view on or off for both players (asks the server if called on a client) */
 	UFUNCTION(BlueprintCallable, Category="Echo|Debug")
 	void RequestShowAllPlatforms(bool bShow);
+
+	/** Debug console command: toggles drawing whip range, the targeting cone, anchor targets, anchors and swing arcs (this machine only) */
+	UFUNCTION(Exec)
+	void EchoWhipDebug();
 
 protected:
 
@@ -146,5 +156,11 @@ public:
 
 	/** Returns the spirit bow component */
 	FORCEINLINE UEchoSpiritBowComponent* GetSpiritBow() const { return SpiritBow; }
+
+	/** Returns the sword whip component */
+	FORCEINLINE UEchoSwordWhipComponent* GetSwordWhip() const { return SwordWhip; }
+
+	/** Returns the movement component as ours (never null) */
+	UEchoCharacterMovementComponent* GetEchoMovement() const;
 };
 

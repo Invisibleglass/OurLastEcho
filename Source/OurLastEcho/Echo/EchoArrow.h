@@ -16,7 +16,8 @@ class USoundBase;
 /**
  *  Glowing spirit-bow arrow. Spawned only by the server (UEchoSpiritBowComponent) and replicated,
  *  so both players see it. Every machine simulates the flight locally from the replicated launch
- *  velocity; only the server decides what the arrow hit (e.g. waking an AEchoPlatform).
+ *  velocity; only the server decides what the arrow hit: waking an AEchoPlatform, becoming an anchor
+ *  point on an anchorable surface (UEchoAnchorRules), or nothing (it stays stuck briefly, then goes).
  *
  *  Collision: its sphere is on the EchoArrow object channel, blocks the world and ignores all pawns,
  *  so it flies through both characters but stops on walls, rocks and echo platform hit boxes.
@@ -58,6 +59,10 @@ protected:
 	/** Seconds an arrow stays stuck in what it hit before disappearing */
 	UPROPERTY(EditDefaultsOnly, Category="Arrow")
 	float StuckLifetime = 2.5f;
+
+	/** Seconds a flying arrow lingers after becoming an anchor point (the anchor draws the stuck arrow from then on) */
+	UPROPERTY(EditDefaultsOnly, Category="Arrow")
+	float AnchoredLifetime = 0.15f;
 
 	/** Seconds before an arrow that hit nothing is removed */
 	UPROPERTY(EditDefaultsOnly, Category="Arrow")
