@@ -327,7 +327,6 @@ void UEchoSwordWhipComponent::ReleaseWhip()
 
 void UEchoSwordWhipComponent::NotifySwingStarted(AEchoAnchorPoint* Anchor)
 {
-	LineExtend = 0.0f;
 	SwingTrail.Reset();
 	if (Anchor)
 	{
@@ -366,8 +365,7 @@ void UEchoSwordWhipComponent::NotifySwingEnded(bool bLaunched)
 
 void UEchoSwordWhipComponent::OnRep_LatchCount()
 {
-	// The other player's machine: lash the line out and play the snap at the anchor
-	LineExtend = 0.0f;
+	// The other player's machine: play the snap at the anchor
 	for (TActorIterator<AEchoAnchorPoint> It(GetWorld()); It; ++It)
 	{
 		if (FVector::DistSquared(It->GetSwingPoint(), LatchedAnchor) < FMath::Square(50.0f))
@@ -561,8 +559,8 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 	}
 	else
 	{
-		LineExtend = FMath::Min(1.0f, LineExtend + DeltaTime / WhipExtendTime);
-		End = FMath::Lerp(Tip, Anchor, LineExtend);
+		// Latched: the whip spans the whole way to the anchor at once, like the swing (it holds her from the first frame)
+		End = Anchor;
 	}
 	const FVector Span = End - Tip;
 	const float Length = Span.Size();
@@ -657,8 +655,8 @@ void UEchoSwordWhipComponent::DrawDebug()
 		const FVector Point = Target->GetSwingPoint();
 		DrawDebugLine(World, From, Point, FColor::Yellow, false, -1.0f, 0, 1.0f);
 		FVector Velocity = Movement ? Movement->Velocity : FVector::ZeroVector;
-		Velocity += (Point - From).GetSafeNormal2D() * LatchBoost;
-		PredictSwingPath(From, Velocity, Point, FMath::Max(MinRopeLength, FVector::Dist(From, Point)), 2.5f, Arc);
+		Velocity += UEchoCharacterMovementComponent::GetLatchBoostDirection(From, Point) * LatchBoost;
+		PredictSwingPath(From, Velocity, Point, FVector::Dist(From, Point), 2.5f, Arc);
 	}
 	for (int32 Index = 1; Index < Arc.Num(); ++Index)
 	{

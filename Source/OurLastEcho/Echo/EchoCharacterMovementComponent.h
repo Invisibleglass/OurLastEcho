@@ -39,6 +39,19 @@ struct FEchoNetworkMoveDataContainer : public FCharacterNetworkMoveDataContainer
 	FEchoNetworkMoveData EchoMoves[3];
 };
 
+/**
+ *  Server-to-client move response with the swing's current rope length added (only in corrections). The rope
+ *  shortens during a swing whenever she moves closer to the anchor, so a client replaying its moves after a
+ *  correction must start from the server's rope, not its own.
+ */
+struct FEchoMoveResponseDataContainer : public FCharacterMoveResponseDataContainer
+{
+	float SwingRopeLength = 0.0f;
+
+	virtual void ServerFillResponseData(const UCharacterMovementComponent& CharacterMovement, const FClientAdjustment& PendingAdjustment) override;
+	virtual bool Serialize(UCharacterMovementComponent& CharacterMovement, FArchive& Ar, UPackageMap* PackageMap) override;
+};
+
 /** A saved (predicted) move, plus the swing input: whether the whip button wants to swing, and at what */
 class FEchoSavedMove : public FSavedMove_Character
 {
@@ -75,8 +88,10 @@ public:
  *  immediately from its own input, sends the same input (whip held + anchor + rope length) with each move,
  *  and the server replays it and only corrects the client if they disagree.
  *
- *  The swing is a pendulum: gravity (scaled) plus a little air control across the rope, with the rope as a
- *  maximum-length constraint (slack rope = free fall). Momentum is kept; letting go (whip button released,
+ *  The swing is a pendulum: gravity (scaled) plus a little air control across the rope. The rope (her whip) is
+ *  always exactly as long as the distance from her to the anchor: it starts at that distance when she latches,
+ *  and shortens whenever she moves closer, so it holds her straight away and never goes slack.
+ *  Momentum is kept; letting go (whip button released,
  *  or a new jump press) launches with a small boost, and the flight after it isn't braked (the template's
  *  falling braking would otherwise cut her to walking speed). Touching walkable ground lets go without a boost.
  *
@@ -93,6 +108,9 @@ public:
 
 	/** Whip input (owning client / listen-server host only): swing from this anchor point with this rope length */
 	void RequestSwing(const FVector& AnchorPoint, float RopeLength);
+
+	/** Direction of the latch boost: across the whip (so it doesn't slacken it), on the anchor's side */
+	static FVector GetLatchBoostDirection(const FVector& Location, const FVector& AnchorPoint);
 
 	/** Whip input: let go (with the release boost) */
 	void StopSwingRequest();
@@ -147,6 +165,7 @@ public:
 	virtual void UpdateCharacterStateBeforeMovement(float DeltaSeconds) override;
 	virtual FRotator ComputeOrientToMovementRotation(const FRotator& CurrentRotation, float DeltaTime, FRotator& DeltaRotation) const override;
 	virtual float GetMaxBrakingDeceleration() const override;
+	virtual void ClientHandleMoveResponse(const FCharacterMoveResponseDataContainer& MoveResponse) override;
 
 	/** Is she flying from a swing (momentum kept until she lands)? */
 	UFUNCTION(BlueprintPure, Category="Echo|Swing")
@@ -196,4 +215,5 @@ protected:
 	float TotalCorrectionDistance = 0.0f;
 
 	FEchoNetworkMoveDataContainer EchoMoveDataContainer;
+	FEchoMoveResponseDataContainer EchoMoveResponseContainer;
 };

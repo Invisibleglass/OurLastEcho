@@ -62,7 +62,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 100))
 	float MaxSwingSpeed = 1600.0f;
 
-	/** Swing speed: a tug towards the anchor when the whip latches, in cm/s, so even a slow latch swings */
+	/** Swing speed: a push along the swing (across the whip, towards the anchor's side) when the whip latches, in cm/s,
+	 *  so even a slow latch swings. It never slackens the whip */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 0))
 	float LatchBoost = 250.0f;
 
@@ -73,10 +74,6 @@ public:
 	/** Steering acceleration from the move input while swinging, in cm/s^2 (across the rope) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 0))
 	float SwingAirControl = 300.0f;
-
-	/** Shortest rope, in cm. Latching closer than this leaves the rope slack until she falls further */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 50))
-	float MinRopeLength = 300.0f;
 
 	/** Upward speed when latching while standing on the ground, so she leaves it */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Swing", meta = (ClampMin = 0))
@@ -102,10 +99,6 @@ public:
 	int32 MappingPriority = 1;
 
 	// ---- Look and sound
-
-	/** Seconds the whip line takes to lash out to the anchor */
-	UPROPERTY(EditAnywhere, Category="Sword Whip|Look", meta = (ClampMin = 0.01))
-	float WhipExtendTime = 0.12f;
 
 	/** Whip line thickness in cm */
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Look", meta = (ClampMin = 0.5))
@@ -273,8 +266,6 @@ protected:
 	TWeakObjectPtr<AEchoAnchorPoint> LastReleasedAnchor;
 	float LastReleaseTime = -1000.0f;
 
-	/** 0..1 as the line lashes out */
-	float LineExtend = 1.0f;
 	bool bLineShown = false;
 
 	/** Recent positions while swinging (debug arc) */

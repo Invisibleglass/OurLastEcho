@@ -20,6 +20,9 @@ namespace
 	/** The server uses the client's rope length if it's within this of its own measurement (so both simulate the same rope) */
 	constexpr float RopeTolerance = 150.0f;
 
+	/** The whip never gets shorter than this (about her capsule's radius), so the pendulum stays well-defined */
+	constexpr float MinRopeLength = 50.0f;
+
 	const TCHAR* SwingRole(const ACharacter* Character)
 	{
 		if (!Character) return TEXT("?");
@@ -65,6 +68,28 @@ FEchoNetworkMoveDataContainer::FEchoNetworkMoveDataContainer()
 	NewMoveData = &EchoMoves[0];
 	PendingMoveData = &EchoMoves[1];
 	OldMoveData = &EchoMoves[2];
+}
+
+// ------------------------------------------------------------------ move response (server to client)
+
+void FEchoMoveResponseDataContainer::ServerFillResponseData(const UCharacterMovementComponent& CharacterMovement, const FClientAdjustment& PendingAdjustment)
+{
+	FCharacterMoveResponseDataContainer::ServerFillResponseData(CharacterMovement, PendingAdjustment);
+	SwingRopeLength = static_cast<const UEchoCharacterMovementComponent&>(CharacterMovement).GetSwingRopeLength();
+}
+
+bool FEchoMoveResponseDataContainer::Serialize(UCharacterMovementComponent& CharacterMovement, FArchive& Ar, UPackageMap* PackageMap)
+{
+	if (!FCharacterMoveResponseDataContainer::Serialize(CharacterMovement, Ar, PackageMap))
+	{
+		return false;
+	}
+	// Only corrections carry it; acknowledgements of good moves stay as small as before
+	if (!ClientAdjustment.bAckGoodMove)
+	{
+		Ar << SwingRopeLength;
+	}
+	return !Ar.IsError();
 }
 
 // ------------------------------------------------------------------ saved moves
@@ -145,6 +170,24 @@ FSavedMovePtr FEchoNetworkPredictionData_Client::AllocateNewMove()
 UEchoCharacterMovementComponent::UEchoCharacterMovementComponent()
 {
 	SetNetworkMoveDataContainer(EchoMoveDataContainer);
+	SetMoveResponseDataContainer(EchoMoveResponseContainer);
+}
+
+void UEchoCharacterMovementComponent::ClientHandleMoveResponse(const FCharacterMoveResponseDataContainer& MoveResponse)
+{
+	// A correction: replay from the server's rope as well as its position and velocity
+	if (!MoveResponse.ClientAdjustment.bAckGoodMove)
+	{
+		SwingRopeLength = static_cast<const FEchoMoveResponseDataContainer&>(MoveResponse).SwingRopeLength;
+	}
+	Super::ClientHandleMoveResponse(MoveResponse);
+}
+
+FVector UEchoCharacterMovementComponent::GetLatchBoostDirection(const FVector& Location, const FVector& AnchorPoint)
+{
+	const FVector RopeDir = (Location - AnchorPoint).GetSafeNormal();
+	const FVector TowardsAnchor = (AnchorPoint - Location).GetSafeNormal2D();
+	return FVector::VectorPlaneProject(TowardsAnchor, RopeDir).GetSafeNormal();
 }
 
 FNetworkPredictionData_Client* UEchoCharacterMovementComponent::GetPredictionData_Client() const
@@ -290,13 +333,15 @@ bool UEchoCharacterMovementComponent::TryStartSwing()
 	}
 
 	SwingAnchor = SwingAnchorRequest;
-	SwingRopeLength = FMath::Clamp(Rope, Whip->MinRopeLength, Whip->WhipRange + RangeTolerance);
+	// The whip is exactly as long as she is far from the anchor, so it holds her from the first frame
+	SwingRopeLength = FMath::Clamp(Rope, MinRopeLength, Whip->WhipRange + RangeTolerance);
 	SwingAnchorActor = Anchor;
 	bJumpHeldAtLatch = CharacterOwner->bPressedJump;
 	bLaunchedFromSwing = false;
 
-	// A tug towards the anchor gets the swing going; from the ground, a hop gets her off it
-	Velocity += (SwingAnchor - Location).GetSafeNormal2D() * Whip->LatchBoost;
+	// A push along the swing gets it going (across the whip, so it doesn't slacken it); from the ground, a hop
+	// gets her off it
+	Velocity += GetLatchBoostDirection(Location, SwingAnchor) * Whip->LatchBoost;
 	if (IsMovingOnGround())
 	{
 		Velocity.Z = FMath::Max(Velocity.Z, Whip->GroundLatchHop);
@@ -405,6 +450,10 @@ void UEchoCharacterMovementComponent::PhysSwing(float DeltaTime, int32 Iteration
 
 		const FVector OldLocation = UpdatedComponent->GetComponentLocation();
 		const FVector RopeDir = (OldLocation - SwingAnchor).GetSafeNormal();
+
+		// The whip follows her in: if she's closer to the anchor than its length (still moving towards it after the
+		// latch, or pushed in by a wall), it shortens to match, so it's never slack
+		SwingRopeLength = FMath::Max(FMath::Min(SwingRopeLength, FVector::Dist(OldLocation, SwingAnchor)), MinRopeLength);
 
 		// Gravity, plus steering from the move input across the rope (a little air control)
 		FVector Accel(0.0f, 0.0f, GetGravityZ() * Whip->SwingGravityScale);
