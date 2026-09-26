@@ -46,12 +46,16 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 - `AEchoCheckpoint` can be limited to one realm (`bOnlyOneRealm` / `OnlyRealm`): separate respawns for Bat's and Saraa's routes.
 - **Swapping roles for tests:** console variable `Echo.HostPlaysSaraa 1` before starting PIE (or `BP_EchoGameMode.bHostPlaysSaraa`). Setting the Blueprint CDO from Python does **not** reach PIE: the Blueprint recompiles when PIE starts.
 
-## Settings / pause menu
+## Title screen, menus, sessions, settings (Milestone 5)
 
-- `AOurLastEchoPlayerController` opens `/Game/Echo/UI/WBP_SettingsMenu` (parent `UEchoSettingsMenu`, BindWidget names `MasterVolumeSlider`, `MasterVolumeText`, `ResumeButton`, `QuitButton`) on `IA_Menu` (Esc / P / gamepad Start; `bTriggerWhenPaused`) or the `EchoMenu` console command. The server's `AEchoGameMode::SetPlayerInSettingsMenu` keeps the list of players in the menu (replicated on `AEchoGameState` for the HUD banner) and uses the engine's `SetPause`/`ClearPause`.
-- **While paused, the server's clock stops**, so actors whose next net update isn't due never replicate. Call `ForceNetUpdate()` on anything that has to reach clients during a pause. The world settings (which carry the pause) are already handled.
-- Volume: `UEchoAudioSettings` (per machine, `GameUserSettings.ini`, audio device `SetTransientPrimaryVolume`).
-- The widget layout is built by `Scripts/build_settings_menu_widget.mcp.py`, which runs in the MCP ProgrammaticToolset sandbox (not editor Python). The sandbox rejected a helper using `**kwargs` with "must define a callable run()", so pass dicts.
+- **Maps:** `GameDefaultMap` = `/Game/Echo/Maps/TitleScreen` (built by `Scripts/build_title_screen.py`; `EditorStartupMap` is still Lvl_SpiritPath). Its game mode `AEchoFrontEndGameMode` spawns no pawns. Opened with `?listen` it's the **lobby** (`IsLobby`), with `AEchoLobbyPlayerState` (replicated `bReady`, `bHostPlayer`). Start = non-seamless `ServerTravel` to Lvl_SpiritPath; `AEchoGameMode` gives the host Bat as before.
+- **UI = CommonUI, built in C++** (`Source/OurLastEcho/Echo/UI/`): screens are `UEchoScreen` (a `UCommonActivatableWidget` that builds its own widget tree in `BuildContent`, not UMG Blueprints). `UEchoUIRoot` holds the `UEchoMenuStack` (fade 0.25 s), dialogs (`ShowDialog`; last choice = Back) and toasts. `UEchoButton` builds its tree in `Initialize()` before CommonButtonBase wraps it. CommonUI input data: `DT_UIActions` + `BP_EchoUIInputData` (`DefaultGame.ini`); viewport client `CommonGameViewportClient`.
+  - Back is ignored for 0.3 s after a screen activates (one press = one screen).
+  - A screen covered by a dialog must not take itself off the stack from the dialog's callback (it jams the stack): set a flag and close when re-activated (see `UEchoSettingsScreen::bCloseWhenActivated`).
+- **Front-end controller** `AEchoFrontEndPlayerController` (title camera, UIRoot, lobby RPCs `ServerSetReady`/`ServerStartGame`, `ClientShowToast`). **In game**, `AOurLastEchoPlayerController` opens `UEchoPauseMenuScreen` on `IA_Menu` / `EchoMenu`; it **doesn't pause** (online). The old paused settings menu and `WBP_SettingsMenu` are gone.
+- **Sessions:** `UEchoSessionSubsystem` (game-instance subsystem) is the only thing the menus call; it uses `Online::GetSessionInterface(World)` (per PIE instance), OSS **Null** today (switch platform service for EOS). Join = `GetResolvedConnectString` + `ClientTravel`, with a 15 s connect timeout. `UEchoGameInstance` turns network/travel failures into the message shown on the title (`ReturnToTitle`, pending message) and has exec commands `EchoHost`, `EchoFindGames`, `EchoJoinGame N`, `EchoReady 0/1`, `EchoStartGame`, `EchoLeave`.
+- **Settings:** `UEchoGameUserSettings` (`GameUserSettingsClassName`; per machine, `GameUserSettings.ini`). Audio = sound classes `SC_Master` → `SC_Music`/`SC_SFX`/`SC_Dialogue`/`SC_Voice` with mix `SMix_Settings` (DefaultSoundClass = SC_SFX, VoiP = SC_Voice). Brightness = `GEngine->DisplayGamma`. **Defaults are written out in `SetToDefaults`**: a config class's CDO holds the saved values. Keys: Enhanced Input user settings (`bEnableUserSettings`), mappable names on the IAs and on IMC_Default's WASD. In the editor, Apply skips resolution/window mode.
+- **Title scene actors:** `AEchoTitleCamera` (drift only in a game world; it ticks in the editor too) and `AEchoTitleBat` (poseable-mesh seated pose `SeatedPose`, `LoopAnimation` hook). Pose rotators: negative roll swings a leg forward.
 ## Engine & toolchain
 
 - **Unreal Engine 5.8.3**, installed at `D:\UE_5.8`. It's a registered (non-launcher) build: the `.uproject`'s `EngineAssociation` is a GUID that maps to that path via `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`.
@@ -87,7 +91,12 @@ Project scripts:
 - `Scripts/build_canyon.py` then `Scripts/build_canyon_rocks.py`: the Milestone 2 canyon and its PCG rocks. **Open editor only.** Landscape edit layers merge on the GPU, and headless runs have no RHI. Same re-run caution as above.
 - `Scripts/build_spirit_bow.py` (Milestone 3 input assets and materials; can run headless) and `Scripts/build_climb.py` (The Climb; open editor).
 - `Scripts/build_sword_whip.py` (Milestone 4 input assets and materials; can run headless) and `Scripts/build_crossing.py` (The Crossing; open editor).
+- `Scripts/build_title_screen.py` (Milestone 5; open editor): audio classes and mix, CommonUI input data, mappable key names, leaves, and the TitleScreen map (rebuilt from scratch; it refuses to touch any other map, then reopens Lvl_SpiritPath). It skips filling `DT_UIActions` if rows exist (the JSON import pops a modal dialog that blocks Python) and reuses `NS_TitleLeaves` (recreating a Niagara system under the same name crashed `SetAsset`).
 - **Level build order:** `build_canyon.py` → `build_climb.py` → `build_crossing.py` (it moves the EndZone after The Climb did) → `build_canyon_rocks.py`.
+- **Milestone 5 tests:**
+  - `Scripts/tools/run_frontend_test.ps1 -Mode title|online` runs `test_frontend_live.py` (52 / 32 checks) in a fresh front-end PIE session.
+  - `Scripts/tools/run_gameplay_test.ps1 -Script <test> -Marker <tag>` runs a Milestone 1–4 live test in a fresh gameplay session.
+  - `Scripts/run_lan_test.ps1` (editor closed) runs two real windowed game processes that host, join, ready and start (`test_lan_standalone.py`).
 - `Scripts/test_crossing_live.py`: Milestone 4 live test, 68 checks, with real predicted swings on Saraa's client.
   - Options (set as Python globals before exec): `ECHO_CROSS_MODE` (`swing1` / `chain` / `swing3` / `host_saraa`), `ECHO_CROSS_NETEMU` (a list of `NetEmulation.*` console commands), `ECHO_CROSS_TRACE`.
   - Release timing comes from a predicted landing, not fixed delays, so it copes with frame rate.
@@ -107,7 +116,7 @@ Headless scripting gotchas learned the hard way:
 The engine's experimental **Unreal MCP** plugin (`ModelContextProtocol` + `AllToolsets`) is enabled. `.mcp.json` points Claude Code at `http://127.0.0.1:8000/mcp`. The server only exists while the editor is open with **Editor Preferences → General → Model Context Protocol → Auto Start Server** on, or after running the console command `ModelContextProtocol.StartServer`. `tools/list` returns only meta-tools (`list_toolsets`, `describe_toolset`, `call_tool`), so discover the actual tools through those. `call_tool` takes the **short** tool name plus the toolset, e.g. `tool_name: "find_actors"`, `toolset_name: "editor_toolset.toolsets.scene.SceneTools"`. The fully-qualified name that `describe_toolset` prints is rejected as unknown.
 - **Editor open + MCP connected:** prefer MCP for editor work, so the user's open, hand-edited level isn't overwritten.
 - **Editor closed:** use `Build.bat` and the headless Python scripts above. Never run headless builds or scripts while the editor is open.
-- **Launch the editor** with `D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe "<project>.uproject"`. Double-clicking the `.uproject` can open the Epic Games Launcher instead.
+- **Launch the editor** with `powershell -File Scripts/tools/launch_editor.ps1 -Wait`. It starts `UnrealEditor.exe` with `-DDC=NoZenLocalFallback` (the local Zen DDC path asserted in `DerivedDataRequestOwner.cpp` and crashed the editor), waits for MCP, and turns background throttling off. Double-clicking the `.uproject` can open the Epic Games Launcher instead.
 
 MCP working notes (learned in Milestone 2):
 - **Running Python in the open editor:** MCP has no Python tool. Use `SlateInspectorToolset`: `Snapshot` to find the status-bar console textbox next to the `Cmd` label (ref `tb2` so far, but refs can change after a restart), `Click` it, then `Type` with `submit: true` the text `py exec(open(r'<path with spaces is fine>').read())`. Output goes to `Saved/Logs/OurLastEcho.log`; wait for it with a Bash until-loop on the marker. The same box runs any console command (`LiveCoding.Compile` for a Live Coding build, `rhi.DumpMemory`, cvars).
@@ -136,6 +145,22 @@ Learned in Milestone 4:
 - **Live Coding** is fine for .cpp-only changes (`LiveCoding.Compile`, then wait for "Live coding succeeded" in the log). If the editor dies afterwards, the patch is gone: rebuild with `Build.bat` before relaunching.
 - When the editor hangs with `CrashReportClientEditor` running, it has crashed: read `Saved/Crashes/<newest>/CrashContext.runtime-xml`, then end both processes.
 - PowerShell `Set-Content -Encoding utf8` writes a BOM, which Python in the editor rejects (`U+FEFF`). Edit scripts with the Edit tool or `sed`.
+
+Learned in Milestone 5:
+- **PIE setups:** `Scripts/tools/pie_mode.ps1 -Mode frontend -Players N` (TitleScreen, Standalone: each window is its own game) or `-Mode gameplay` (Lvl_SpiritPath, listen server). `LevelEditorPlaySettings` isn't reachable from Python; it's set through MCP `ObjectTools`.
+- **Editor Python runs RPCs locally in both directions,** also in `-game` processes started from `UnrealEditor.exe`: a server-side `ServerTravel` from Python made the *host* run the guest's `ClientTravel`. Queue such clicks with `EchoUITestLibrary.QueueClickWidget` / `QueueKey` (next engine tick, outside Python).
+- **UI test input** (`UEchoUITestLibrary`) goes through Slate:
+  - CommonUI ignores the first mouse move after gamepad input, and the click that switches input type, so hover (two moves) before clicking.
+  - PIE windows share one cursor, and a viewport in game keeps mouse capture: release capture before hovering another window.
+  - The editor's console box keeps keyboard focus after `ue_cmd`: focus the game first.
+  - The **Message Log window** opens over the viewport at PIE start and catches clicks: `close_message_log.ps1`.
+- **Live Coding + unity build:** a patch recompiled `EchoGameMode.cpp` alongside another file, and its file-local `TAutoConsoleVariable` was never constructed (null crash at map load). Do a full rebuild before multiplayer or travel tests.
+- **Python gotchas:**
+  - Array elements (e.g. IMC mappings) come back as copies: edit, collect, and set the whole list back.
+  - A controller's pawn: `GameplayStatics.get_player_pawn(world, 0)` (`get_pawn` / `k2_get_pawn` aren't exposed).
+  - `SubsystemBlueprintLibrary` isn't available in `-game`.
+  - Order PIE worlds by `get_path_name()` (`UEDPIE_<n>_`), not `get_name()` (the same after travel).
+- **`-nullrhi` games can't drive CommonUI** (screen transitions never finish). Run test games windowed, at `scalability 0`: two full-quality copies starve the 6 GB GPU.
 ## C++ vs Blueprint split (important)
 
 `.uasset` (Blueprints, widgets, materials, etc.) and `.umap` (levels) are **binary**, so Claude can't read or edit them directly. Therefore:
@@ -148,11 +173,11 @@ Learned in Milestone 4:
 
 ## Content & config
 
-- Default game/editor map: **`/Game/Echo/Maps/Lvl_SpiritPath`** (game mode `BP_EchoGameMode` via its World Settings override). The project-wide default game mode is still the template's `BP_ThirdPersonGameMode`.
+- Default **game** map: **`/Game/Echo/Maps/TitleScreen`** (Milestone 5). Default **editor** map: **`/Game/Echo/Maps/Lvl_SpiritPath`** (game mode `BP_EchoGameMode` via its World Settings override). The headless tests pass the map explicitly. The project-wide default game mode is still the template's `BP_ThirdPersonGameMode`.
 - Game content lives under `/Game/Echo/` (Blueprints, Materials, Maps, PCG). Greybox geometry uses `/Engine/BasicShapes/Cube` + `/Game/LevelPrototyping/Materials/MI_PrototypeGrid_Gray`.
 - PIE defaults to **2 players, Play As Listen Server** (`Config/DefaultEditorPerProjectUserSettings.ini`, also set in the user's own `Saved/` copy).
 - Template levels: `ThirdPerson/Lvl_ThirdPerson` and the `Variant_*` levels. These use World Partition / One File Per Actor (`Content/__ExternalActors__`); `Lvl_SpiritPath` does not.
-- Enabled plugins: StateTree, GameplayStateTree (used by the template AI), ModelingToolsEditorMode, PythonScriptPlugin, EditorScriptingUtilities, PCG, ModelContextProtocol, AllToolsets. There's no Starter Content in this engine install; use engine BasicShapes and `/Game/LevelPrototyping` meshes.
+- Enabled plugins: StateTree, GameplayStateTree (used by the template AI), ModelingToolsEditorMode, PythonScriptPlugin, EditorScriptingUtilities, PCG, ModelContextProtocol, AllToolsets, and since Milestone 5 CommonUI, OnlineSubsystem, OnlineSubsystemNull, OnlineSubsystemUtils, Niagara, EngineCameras. There's no Starter Content in this engine install; use engine BasicShapes and `/Game/LevelPrototyping` meshes.
 - `Config/DefaultEngine.ini` `[SystemSettingsEditor]` halves Lumen's surface cache atlas **in the editor only**. 2-player PIE renders two worlds on one 6 GB GPU and ran out of video memory otherwise.
 
 ## Git

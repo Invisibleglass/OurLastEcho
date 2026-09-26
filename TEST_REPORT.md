@@ -159,3 +159,69 @@ Unreal's packet simulation was switched on with its console variables during the
 - **Background frame rate:** with *Use Less CPU when in Background* on (it resets to on at every editor start), a background editor ran the two PIE worlds at **~3 fps**. At that rate every scripted input is 0.33 s apart, and even plain walking drew corrections (40–140 cm per frame). Those are an artefact of the frame rate, not the swing. With the setting off, the editor ran at **~46 fps** and every correction disappeared. CLAUDE.md has the MCP call that turns it off.
 - **Engine crash:** there was one editor crash inside the engine's derived-data cache HTTP code (`DerivedDataRequestOwner.cpp` assertion) as PIE started. It's unrelated to the project; the next start was fine.
 - **Editor Python can't send client-to-server RPCs** (same as Milestone 3). Everything on Saraa's side that goes through normal movement was tested on her real client: the latch, swing and release travel inside movement updates, not RPCs. The lash's RPC is the one path left for a manual check.
+
+## Milestone 5: baseline before starting, then results
+
+### Baseline (start of Milestone 5, before any changes)
+
+Run on branch `milestone-5-title-screen` straight after branching from `milestone-4-sword-whip`, each in a fresh 2-player listen-server PIE session:
+
+| Test | Result |
+|---|---|
+| `test_pie_live.py` (Milestone 1 mechanics) | ✅ Pass, 29/29 |
+| `test_canyon_live.py` (Milestone 2 canyon) | ✅ Pass, 34/34 |
+| `test_climb_live.py` (Milestone 3 bow, echo platforms, The Climb) | ✅ Pass, 60/60 |
+| `test_menu_live.py` (Milestone 4 settings / pause menu) | ✅ Pass, 17/17 |
+| `test_crossing_live.py` (Milestone 4 whip, anchors, The Crossing) | ✅ Pass, 68/68 |
+
+### Milestone 5 results (end of milestone)
+
+**How it was tested:**
+- **Front end** (`Scripts/test_frontend_live.py`), in Play-In-Editor with each player in Standalone mode, so each window is its own game, as on separate PCs.
+  - **Input goes through Slate, the same path as a player's devices:** key presses (keyboard and gamepad buttons) and mouse moves and clicks on the actual buttons.
+  - That exercises navigation, focus, CommonUI's back handling and the buttons themselves.
+- **Hosting and joining again with two real game processes** (`Scripts/run_lan_test.ps1`, editor closed), outside the editor entirely.
+
+| Item | Result | Notes |
+|---|---|---|
+| Compiles, no warnings | ✅ Pass | Editor and Game targets: `Result: Succeeded`. The Game target (a full compile of every Milestone 5 file) printed 0 warnings. |
+| Title map is the startup map | ✅ Pass | The game starts on TitleScreen with the front-end game mode (checked in PIE and in both standalone games). |
+| Title scene | ✅ Pass | The player views through the title camera, which drifts (~17 cm in 2 s). Bat is seated: knees 44 cm ahead of his hips at hip height, feet below his knees, head up. The leaves are active. The music and wind hooks exist on the Music and Effects sound classes. The framing was checked in a screenshot. |
+| Main menu | ✅ Pass | Play, Settings, Credits, Quit. Play has focus when the menu opens. |
+| Keyboard, gamepad and mouse | ✅ Pass | Down arrow / d-pad move one button at a time. Gamepad A opens Settings, B goes back. Hovering highlights a button and moves the focus to it. A mouse click opens Credits. P goes back. |
+| Credits and Quit | ✅ Pass | Credits scroll. Quit asks first; Cancel keeps the game running. |
+| Settings: audio | ✅ Pass | Left arrow twice on Master volume → 90%. At 80%, the Master sound class **plays at 0.80 straight away**. Music at 60% plays at 0.48 (60% × 80% master). |
+| Settings: controls | ✅ Pass | Sensitivities change the look speed the character uses (1.10; 0.72 while aiming). Invert Y and toggle aim save. Jump rebinds Space → J, and the WASD keys are rebindable. |
+| Settings: accessibility | ✅ Pass | Subtitle size Large (×1.35). Reduce camera shake → shakes play at 0.2. |
+| Settings: graphics | ✅ Pass (in PIE) / ⚠️ window mode and resolution need a manual test | The quality preset applies (Epic → High). The frame cap (144), v-sync and brightness change. Window mode and resolution are skipped in the editor. |
+| Apply, Discard, Reset, unsaved prompt | ✅ Pass | Back with changes asks. Apply saves and closes. Discard restores the old volume. Reset to Defaults resets settings **and** key bindings. |
+| Saved and loaded | ✅ Pass | The values are in `GameUserSettings.ini` and come back after reloading the file. The J rebinding is still there when Settings reopens. |
+| Host, find, join | ✅ Pass | The host's lobby opens on a listen server. The guest finds the game and joins. Both lobbies list Bat (host) and Saraa with "(you)" on the right line. |
+| Ready and Start | ✅ Pass | Start is hidden for the guest and disabled for the host until both are ready. Ready shows on both screens. Start takes both into Lvl_SpiritPath with pawns: **host = Bat, guest = Saraa**. |
+| In-game menu | ✅ Pass | Opens with Resume, Settings, Leave Game. **The game doesn't pause:** both worlds keep running and the clock advances. Settings opens; Resume closes the menu. |
+| Leaving | ✅ Pass | Guest leaves the game → both on the title, host told "Saraa left the game." Host leaves the game → both on the title, guest told "The host left the game." Host leaves the lobby → guest told the same. |
+| Joining fails | ✅ Pass | Joining a game that closed after it was listed → "Couldn't connect to that game. It may have closed." after 15 s. OK returns to the Join list. With nobody hosting, the list is empty and says so. |
+| **Two real game processes over LAN** | ✅ Pass | Host: title → EchoHost → lobby → guest joins → both ready → Start → Lvl_SpiritPath as Bat. Guest: Play → Join Game → the game is listed → joins → Ready → arrives as Saraa. |
+| Earlier mechanics still work | ✅ Pass | Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, The Crossing 68/68, and the headless end-to-end test PASS. The old menu test was retired along with the old menu (its replacement is covered above). |
+
+**Totals:** title 52/52, online 32/32, LAN two-process PASS/PASS, Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, The Crossing 68/68, headless PASS.
+
+### Bugs the tests caught (all fixed)
+
+1. **Reset to Defaults reset nothing.** It copied from the settings class's default object, but for a config class that object holds the *saved* values. The defaults are now written out.
+2. **"Aim" was two rows:** the hold/toggle setting and the Aim key binding shared a name, so one hid the other. The setting is now "Aim mode".
+3. **Apply / Discard in the unsaved-changes prompt left a dead dialog on screen.** Settings removed itself while the dialog was still closing, which jammed CommonUI's screen stack. Settings now closes once it's back on top.
+4. **One Back press closed two screens** (Credits, then the main menu's Quit prompt). Screens now ignore Back for 0.3 s after they appear.
+5. **The WASD keys weren't rebindable:** the builder's edits to the input mapping context were lost, because Python hands out copies of array items. They're now written back as a new list.
+6. **Joining a closed game hung on "Joining..."** for the engine's multi-minute timeout. It now gives up after 15 s with a message.
+7. **The title camera looked away from Bat.** It was reframed so Bat sits on the right third, beside the tree, with the menu over the canyon on the left.
+
+### Test conditions and tooling notes
+
+- **Editor Python runs server RPCs locally, even in `-game` processes started from the editor executable.** A click that makes a client call the server (Ready), or makes the server tell clients to travel (Start), is queued to the next engine tick instead (`EchoUITestLibrary.QueueClickWidget`). Before that fix, the host executed the guest's "travel" order itself and the guest was left behind.
+- **Two PIE windows share one mouse cursor.** A player in game has the mouse captured by their viewport, which swallows the other player's clicks. The test's hover releases that capture first, as moving a real mouse to another window would.
+- **CommonUI ignores the first mouse move after gamepad input**, and a click that switches it to mouse mode. The test's hover sends two small moves, then clicks.
+- **The Message Log window floats over the middle of the editor viewport** at every PIE start and catches clicks on centred dialogs. The runners close it first.
+- **`-nullrhi` games can't drive the menus:** nothing is drawn, so CommonUI's screen transitions never finish. The LAN test runs two small windows at the Low preset. At full quality, two copies overloaded this 6 GB GPU to a few frames per second.
+- **Live Coding broke a gameplay console variable** after one patch (unity builds put unrelated files in one patch), which crashed the host at map load. A full rebuild fixed it. Full rebuilds were used before every multiplayer run after that.
+- **Editor crash in the derived-data cache** (as in Milestone 4). The editor is now launched with `-DDC=NoZenLocalFallback` (`Scripts/tools/launch_editor.ps1`), and it hasn't recurred.

@@ -1,3 +1,152 @@
+# Milestone 5 – Title screen, menus, hosting and settings
+
+Branch: `milestone-5-title-screen`, branched from `milestone-4-sword-whip` (Milestone 4 isn't merged into `main` yet, as asked). Nothing was pushed. Built with the editor open, driven through its MCP server.
+
+**In short:** the game now starts on a title screen. From there one player hosts over LAN, the other joins, both ready up in a lobby, and the host starts the Spirit Path. Settings (graphics, audio, controls, accessibility) are saved per machine, and there's an in-game menu that doesn't pause the online game.
+
+## What was built
+
+Where the brief offered a choice, I picked the simplest option. Each choice is noted.
+
+**1. The title scene** (`/Game/Echo/Maps/TitleScreen`, built by `Scripts/build_title_screen.py`):
+- **The game's default map** (`GameDefaultMap`); the editor still opens `Lvl_SpiritPath`.
+- **Scene:** a greybox corner of the canyon at sunset.
+  - Terraced walls and boulders, with the canyon running away towards a low, warm sun.
+  - Soft warm height fog and a light vignette.
+- **Bat** (`AEchoTitleBat`): he sits on a rock beside a placeholder tree and bush, three-quarters turned away from the camera.
+  - *Simplest option:* the seated pose isn't a Control Rig or Sequencer animation. It's a pose set directly on his bones (`SeatedPose`, a list of bone rotations you can edit in the Details panel).
+  - **Picking-leaves hook:** set `LoopAnimation` to an animation and he plays it on a loop instead of the pose.
+- **Camera** (`AEchoTitleCamera`, a Cine Camera): a slow drift and sway. Tuning: `DriftAmplitude`, `DriftPeriod`, `SwayDegrees`.
+- **Leaves:** Niagara (`NS_TitleLeaves`, from the engine's Blowing Particles template), drawn as placeholder leaf-coloured quads (`M_Leaf`).
+- **Music and wind hooks:** two Ambient Sound actors, `TitleMusic` (Music sound class) and `WindAmbience` (Effects sound class). They're silent until you drop a sound onto each.
+
+**2. The main menu:**
+- **Buttons:** Play, Settings, Credits and Quit, under the placeholder title "Our Last Echo".
+- **Built with CommonUI:** every screen is a C++ `CommonActivatableWidget`, and screens fade in and out (0.25 s).
+- **Mouse, keyboard and gamepad** all work:
+  - Arrows / d-pad move the focus, and Enter / Space / gamepad A press the focused button.
+  - Esc / P / gamepad B go back.
+  - The focused (or hovered) button lights up amber.
+- *Simplest option:* the screens build their own layout in C++ instead of UMG Blueprints. Nothing binary had to be hand-edited, and CommonUI's focus and back handling works the same. The catch: you can't rearrange them in the UMG designer yet (see *Suggestions*).
+
+**3. Play: hosting and joining:**
+- **Sessions:** `UEchoSessionSubsystem` wraps the online subsystem's sessions. It uses **Online Subsystem Null** (LAN) today (`DefaultPlatformService=Null` in `DefaultEngine.ini`).
+  - The menus only ever talk to this subsystem, never to the online subsystem directly.
+  - **Switching to EOS later:** enable the EOS plugin, set the platform service, and adjust the subsystem's LAN flag. The menus don't change.
+- **Host Game:** creates the session and reopens the title map as a listen server. That's the **lobby**.
+- **Join Game:** lists games found on the network (host name and ping), with Refresh and Back.
+- **Lobby:**
+  - Shows both players with their roles: host = Bat, second player = Saraa.
+  - Each player has a Ready toggle.
+  - **Start Game** appears only for the host, and is enabled once both players are ready.
+  - Start takes both players to `Lvl_SpiritPath` (a normal server travel; the guest reconnects on the new map).
+- **Messages, each with a way back:**
+
+  | Situation | What the player sees |
+  |---|---|
+  | Guest joins or leaves the lobby | A toast on the host's screen |
+  | Game is full | The host turns the third player away, and they see a "couldn't join / connect" message (not tested: PIE was set up for two players) |
+  | Game has closed | "Couldn't connect to that game. It may have closed." |
+  | Nobody is hosting | The Join list says there are no games |
+  | Host leaves (lobby or game) | The guest returns to the title with "The host left the game." |
+  | Guest leaves the game | The host returns to the title with "Saraa left the game." |
+
+  - The closed-game case gives up after 15 s; the engine alone would wait minutes.
+
+**4. Settings** (four tabs; switch with the tab buttons, LB/RB or Q/E):
+- **Graphics:**
+  - Window mode, resolution (the monitor's supported list), quality preset (Low–Epic).
+  - V-sync and frame rate cap (30/60/120/144/unlimited).
+  - Brightness (applied as display gamma).
+- **Audio:** master, music, effects, dialogue and voice chat volumes, plus a microphone toggle.
+  - The sliders drive **real sound classes**: `SC_Master` is the parent of `SC_Music`, `SC_SFX`, `SC_Dialogue` and `SC_Voice`.
+  - The volumes are applied through the `SMix_Settings` sound mix, so a change is heard immediately.
+  - Sounds with no class use Effects; voice chat uses Voice.
+- **Controls:**
+  - Mouse, aim and gamepad sensitivity, and invert Y.
+  - Aim mode: hold or toggle.
+  - **Key rebinding** for keyboard and mouse through Enhanced Input's user settings: move forward/back/left/right, jump, aim, fire, whip and menu. Select a row, press the new key; Esc cancels.
+- **Accessibility:**
+  - Subtitles on/off and subtitle size (Small / Medium / Large / Extra large).
+  - Reduce camera shake: the bow's shake plays at 20%.
+- **Buttons:**
+  - **Apply** saves.
+  - **Reset to Defaults** asks first, then resets settings and key bindings.
+  - **Back** with unsaved changes asks *Apply / Discard / Cancel*.
+- **When changes take effect:** straight away where possible, so you hear or see them before applying. Discard puts them back. Resolution and window mode change on Apply (only outside the editor).
+- **Saving:** settings go to `GameUserSettings.ini`, and key bindings through Enhanced Input's own save. Both load on the next launch. They're **per machine**, which also settles the Milestone 3 to-do: each player has their own volume.
+
+**5. Credits and quitting:** a slowly scrolling credits screen (placeholder names). Quit asks "Quit Our Last Echo?".
+
+**6. In-game menu:**
+- **Opening it:** Esc / P / gamepad Start opens Resume, Settings and Leave Game.
+- **It doesn't pause:** the world keeps running for both players, and the other player isn't affected.
+- **Settings** opens the same settings screen as the title menu.
+- **Leave Game** asks first, then returns both players to the title screen. The other player is told why (see the table above).
+- **Replaced:** the Milestone 4 settings/pause menu (which paused both players) was removed, along with its widget and scripts.
+
+**Gameplay hooks for the new settings:** the character's look input uses the sensitivities and invert Y. The bow uses hold/toggle aim and plays a (reducible) camera shake when firing. The HUD can show subtitles at the chosen size (test with the console command `EchoSubtitle Hello`).
+
+## How to test
+
+**Just play (editor):** PIE settings decide which setup you get. `Scripts/tools/pie_mode.ps1` switches between them:
+- `pie_mode.ps1 -Mode frontend -Players 2`: TitleScreen, 2 players in Standalone mode. Each window is its own game, like two PCs on a LAN. Host in one window, join from the other.
+- `pie_mode.ps1 -Mode gameplay`: back to the project default, Lvl_SpiritPath with 2 players as listen server, for the gameplay levels.
+- In the editor by hand: open TitleScreen, set *Net Mode* to *Play Standalone* and *Number of Players* to 2 in the Play options.
+
+**Two real copies of the game (editor closed):** `powershell -File Scripts/run_lan_test.ps1`. It opens two small game windows. One hosts, the other joins through the menus, both ready up, and the host starts. Both must end up in the Spirit Path as Bat and Saraa (about 2 minutes). To play it yourself, launch the game twice with `UnrealEditor.exe "<project>.uproject" -game -windowed`.
+
+**Automated (editor open):**
+- `Scripts/tools/run_frontend_test.ps1 -Mode title` (1 player, 52 checks, ~20 s): the scene, the menus by keyboard, gamepad and mouse, Credits, Quit, and every settings tab, including Apply / Discard / Reset, saving and reloading.
+- `Scripts/tools/run_frontend_test.ps1 -Mode online` (2 players, 32 checks, ~100 s): host, join, lobby, ready, start, the in-game menu not pausing, each player leaving, a closed game, and an empty list.
+- `Scripts/tools/run_gameplay_test.ps1 -Script test_climb_live.py -Marker ECHO_CLIMB_TEST` (and the same for the other Milestone 1–4 tests) runs a gameplay suite in a fresh session.
+
+**Rebuilding the title map:** `build_title_screen.py`, in the open editor. It opens TitleScreen, rebuilds it from scratch (so hand edits to it are lost), then reopens Lvl_SpiritPath. It also (re)creates the audio classes, the CommonUI input data and the rebindable key names.
+
+## Results
+
+**All suites pass:**
+
+| Suite | Checks |
+|---|---|
+| Title scene, menus and settings | 52/52 |
+| Hosting, joining, lobby and in-game menu | 32/32 |
+| Two real game processes over LAN | host PASS, guest PASS |
+| Milestone 1 | 29/29 |
+| Milestone 2 | 34/34 |
+| Milestone 3 | 60/60 |
+| The Crossing (Milestone 4) | 68/68 |
+| Headless end-to-end (`run_spirit_path_test.ps1`) | PASS |
+
+Details, and the bugs the tests caught, are in TEST_REPORT.md.
+
+## Known issues
+
+- **Needs a manual check: feel and looks.**
+  - The tests press keys, gamepad buttons and mouse clicks through the same input path a player's devices use, but nobody has pressed a real controller yet.
+  - Worth checking by eye: the focus highlight, the fades, and the title shot.
+  - Colours are placeholders.
+- **Needs a manual check: resolution and window mode.** These only apply outside the editor (in PIE they'd resize the editor). The two-process LAN test ran real games but didn't change them.
+- **Silent title:** the music and wind hooks have no sounds yet, and the credits are placeholders.
+- **Voice chat doesn't exist yet.** Its volume slider and the microphone toggle are saved and drive the Voice sound class, but there's nothing to hear or mute.
+- **Gamepad buttons can't be rebound**, only keyboard and mouse. The gamepad layout is fixed.
+- **The menu layouts are built in C++**, so changing spacing or order means editing code, not the UMG designer.
+- **Starting the game is a hard map change:** both players see a short load, and the guest reconnects. Seamless travel (with a loading screen) is a Milestone 6 suggestion.
+- **Two copies of the game on this PC** (6 GB GPU) crawl at full quality; the LAN test runs them at Low. One copy per PC is fine.
+- **The Message Log window pops up at every PIE start,** because of an engine plugin's asset-manager warning (`GameFeatureData`). It's harmless; `Scripts/tools/close_message_log.ps1` closes it.
+- **EOS isn't tested.** It needs an Epic developer account and product IDs.
+
+## Suggestions for Milestone 6
+
+- **Online for real:** switch to EOS (friend invites and joining across the internet), and use seamless travel with a loading screen so the guest never disconnects between maps.
+- **Menus in UMG:** make each screen a Blueprint subclass with `BindWidget` parts, so the layout, fonts and art can be done in the designer. Add controller button icons (CommonUI input data can show the right glyph per device).
+- **Title scene art:** the picking-leaves animation for Bat, a real tree, and the title music and wind.
+- **Progress:** save which section the pair reached and add a Continue option.
+- **Voice chat,** now that the settings are ready for it, and gamepad rebinding.
+- **Story subtitles:** hook the subtitle system to the first lines of dialogue.
+
+---
+
 # Milestone 4 – The sword whip and anchor arrows
 
 Branch: `milestone-4-sword-whip`, branched from `main` after Milestone 3 was merged. Built with the editor open, driven through its MCP server.
