@@ -10,15 +10,17 @@
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
-#include "EchoAudioSettings.h"
-#include "EchoGameMode.h"
-#include "EchoSettingsMenu.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
+#include "EchoGameUserSettings.h"
+#include "EchoHUD.h"
+#include "EchoMenuScreens.h"
+#include "EchoSettingsScreen.h"
 #include "EchoSpiritBowComponent.h"
+#include "EchoUIWidgets.h"
 #include "OurLastEchoCharacter.h"
 
 AOurLastEchoPlayerController::AOurLastEchoPlayerController()
 {
-	SettingsMenuClass = TSoftClassPtr<UEchoSettingsMenu>(FSoftObjectPath(TEXT("/Game/Echo/UI/WBP_SettingsMenu.WBP_SettingsMenu_C")));
 	MenuAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Menu.IA_Menu")));
 	MenuMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Menu.IMC_Menu")));
 }
@@ -27,10 +29,17 @@ void AOurLastEchoPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// This machine's saved sound volume
 	if (IsLocalPlayerController())
 	{
-		UEchoAudioSettings::ApplySavedVolume(this);
+		// This machine's saved settings (volumes into this world's sound mix)
+		if (UEchoGameUserSettings* Settings = UEchoGameUserSettings::GetEchoSettings())
+		{
+			Settings->ApplyAudio();
+		}
+
+		// Coming from the title screen's menus, the cursor and UI input mode may still be on
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
 	}
 
 	// only spawn touch controls on local player controllers
@@ -63,6 +72,15 @@ void AOurLastEchoPlayerController::SetupInputComponent()
 		// Add Input Mapping Contexts
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 		{
+			// Key bindings the player changed in Settings apply to these (Enhanced Input user settings)
+			if (UEnhancedInputUserSettings* UserSettings = Subsystem->GetUserSettings())
+			{
+				for (UInputMappingContext* Context : UEchoSettingsScreen::LoadMappableContexts())
+				{
+					UserSettings->RegisterInputMappingContext(Context);
+				}
+			}
+
 			for (UInputMappingContext* CurrentContext : DefaultMappingContexts)
 			{
 				Subsystem->AddMappingContext(CurrentContext, 0);
@@ -86,49 +104,45 @@ void AOurLastEchoPlayerController::SetupInputComponent()
 		UInputAction* Menu = MenuAction.LoadSynchronous();
 		if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent); EnhancedInput && Menu)
 		{
-			EnhancedInput->BindAction(Menu, ETriggerEvent::Started, this, &AOurLastEchoPlayerController::ToggleSettingsMenu);
+			EnhancedInput->BindAction(Menu, ETriggerEvent::Started, this, &AOurLastEchoPlayerController::TogglePauseMenu);
 		}
 	}
 }
 
-bool AOurLastEchoPlayerController::IsSettingsMenuOpen() const
+bool AOurLastEchoPlayerController::IsPauseMenuOpen() const
 {
-	return SettingsMenu && SettingsMenu->IsInViewport();
+	return UIRoot && UIRoot->HasScreens();
 }
 
-void AOurLastEchoPlayerController::ToggleSettingsMenu()
+void AOurLastEchoPlayerController::TogglePauseMenu()
 {
-	if (IsSettingsMenuOpen())
+	if (IsPauseMenuOpen())
 	{
-		CloseSettingsMenu();
+		ClosePauseMenu();
 	}
 	else
 	{
-		OpenSettingsMenu();
+		OpenPauseMenu();
 	}
 }
 
 void AOurLastEchoPlayerController::EchoMenu()
 {
-	ToggleSettingsMenu();
+	TogglePauseMenu();
 }
 
-void AOurLastEchoPlayerController::OpenSettingsMenu()
+void AOurLastEchoPlayerController::OpenPauseMenu()
 {
-	if (!IsLocalPlayerController() || IsSettingsMenuOpen())
+	if (!IsLocalPlayerController() || IsPauseMenuOpen())
 	{
 		return;
 	}
 
-	if (!SettingsMenu)
+	if (!UIRoot)
 	{
-		UClass* MenuClass = SettingsMenuClass.LoadSynchronous();
-		if (!MenuClass)
-		{
-			UE_LOG(LogOurLastEcho, Error, TEXT("Settings menu widget %s not found"), *SettingsMenuClass.ToString());
-			return;
-		}
-		SettingsMenu = CreateWidget<UEchoSettingsMenu>(this, MenuClass);
+		UIRoot = CreateWidget<UEchoUIRoot>(this, UEchoUIRoot::StaticClass());
+		UIRoot->AddToPlayerScreen(50);
+		UIRoot->OnEmptied.AddUObject(this, &AOurLastEchoPlayerController::HandleMenusClosed);
 	}
 
 	// Don't leave Bat stuck aiming if the aim button is let go while the menu is up
@@ -137,48 +151,30 @@ void AOurLastEchoPlayerController::OpenSettingsMenu()
 		EchoCharacter->GetSpiritBow()->SetAiming(false);
 	}
 
-	SettingsMenu->AddToViewport(100);
-	FInputModeUIOnly InputMode;
-	InputMode.SetWidgetToFocus(SettingsMenu->TakeWidget());
-	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-	SetInputMode(InputMode);
-	SetShowMouseCursor(true);
-	SettingsMenu->FocusFirstControl();
-
-	ReportMenuState(true);
+	// The menu takes input (CommonUI switches to menu input and shows the cursor); the world keeps running
+	UIRoot->Push<UEchoPauseMenuScreen>();
 }
 
-void AOurLastEchoPlayerController::CloseSettingsMenu()
+void AOurLastEchoPlayerController::ClosePauseMenu()
 {
-	if (!IsSettingsMenuOpen())
+	if (UIRoot)
 	{
-		return;
+		UIRoot->CloseAll();
 	}
+	HandleMenusClosed();
+}
 
-	SettingsMenu->RemoveFromParent();
+void AOurLastEchoPlayerController::HandleMenusClosed()
+{
 	SetInputMode(FInputModeGameOnly());
 	SetShowMouseCursor(false);
-
-	ReportMenuState(false);
 }
 
-void AOurLastEchoPlayerController::ReportMenuState(bool bOpen)
+void AOurLastEchoPlayerController::EchoSubtitle(const FString& Text)
 {
-	if (HasAuthority())
+	if (AEchoHUD* EchoHUD = GetHUD<AEchoHUD>())
 	{
-		ServerSetInSettingsMenu_Implementation(bOpen);
-	}
-	else
-	{
-		ServerSetInSettingsMenu(bOpen);
-	}
-}
-
-void AOurLastEchoPlayerController::ServerSetInSettingsMenu_Implementation(bool bOpen)
-{
-	if (AEchoGameMode* GameMode = GetWorld()->GetAuthGameMode<AEchoGameMode>())
-	{
-		GameMode->SetPlayerInSettingsMenu(this, bOpen);
+		EchoHUD->ShowSubtitle(FText::FromString(Text), 5.0f);
 	}
 }
 

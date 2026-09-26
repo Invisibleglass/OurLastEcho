@@ -39,4 +39,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Echo|Editor", meta=(DevelopmentOnly))
 	static ALandscape* CreateLandscapeFromHeights(FVector Location, FVector Scale, int32 ComponentCountX, int32 ComponentCountY,
 		int32 QuadsPerComponent, const TArray<float>& Heights, UMaterialInterface* Material, const FString& Label, FName Tag);
+
+	/**
+	 *  Creates (or replaces) a Niagara system asset containing a copy of one emitter, e.g. one of Niagara's
+	 *  templates, with every sprite renderer using SpriteMaterial. Python can't build Niagara systems otherwise.
+	 *  The caller saves the asset.
+	 *
+	 *  @param AssetPath       e.g. /Game/Echo/FX/NS_TitleLeaves
+	 *  @param EmitterPath     e.g. /Niagara/DefaultAssets/Templates/Emitters/BlowingParticles
+	 *  @param SpriteMaterial  must be usable with Niagara sprites (bUsedWithNiagaraSprites)
+	 */
+	UFUNCTION(BlueprintCallable, Category="Echo|Editor", meta=(DevelopmentOnly))
+	static UObject* CreateNiagaraSystemFromEmitter(const FString& AssetPath, const FString& EmitterPath, UMaterialInterface* SpriteMaterial);
 };

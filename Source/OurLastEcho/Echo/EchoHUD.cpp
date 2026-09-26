@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "EchoGameState.h"
 #include "EchoAnchorPoint.h"
+#include "EchoGameUserSettings.h"
 #include "EchoSpiritBowComponent.h"
 #include "EchoSwordWhipComponent.h"
 #include "OurLastEchoCharacter.h"
@@ -36,7 +37,7 @@ void AEchoHUD::DrawHUD()
 		return;
 	}
 
-	DrawPausedBanner();
+	DrawSubtitle();
 
 	if (GameState->IsDebugShowAllPlatforms())
 	{
@@ -60,36 +61,6 @@ void AEchoHUD::DrawHUD()
 
 	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f), X - 40.0f, Y - 20.0f, TextWidth + 80.0f, TextHeight + 40.0f);
 	DrawText(Message, FLinearColor::White, X, Y, Font, TextScale);
-}
-
-void AEchoHUD::DrawPausedBanner()
-{
-	const AEchoGameState* GameState = GetWorld()->GetGameState<AEchoGameState>();
-	const AOurLastEchoPlayerController* PC = Cast<AOurLastEchoPlayerController>(PlayerOwner);
-	if (!GameState || !GetWorld()->IsPaused() || (PC && PC->IsSettingsMenuOpen()))
-	{
-		return;
-	}
-
-	// "Bat" / "Saraa" from each menu player's character
-	TArray<FString> Names;
-	for (const APlayerState* Player : GameState->GetPlayersInSettingsMenu())
-	{
-		const AOurLastEchoCharacter* Character = Player ? Cast<AOurLastEchoCharacter>(Player->GetPawn()) : nullptr;
-		Names.Add(Character ? (Character->GetRealm() == EEchoRealm::Living ? TEXT("Bat") : TEXT("Saraa")) : TEXT("The other player"));
-	}
-	const FString Who = Names.Num() > 0 ? FString::Join(Names, TEXT(" and ")) : TEXT("The other player");
-	const FString Message = FString::Printf(TEXT("Paused - %s %s the settings menu"), *Who, Names.Num() > 1 ? TEXT("are in") : TEXT("is in"));
-
-	UFont* Font = GEngine->GetLargeFont();
-	float TextWidth = 0.0f;
-	float TextHeight = 0.0f;
-	GetTextSize(Message, TextWidth, TextHeight, Font, 1.5f);
-	const float X = (Canvas->ClipX - TextWidth) * 0.5f;
-	const float Y = Canvas->ClipY * 0.5f - TextHeight * 0.5f;
-
-	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
-	DrawText(Message, FLinearColor::White, X, Y, Font, 1.5f);
 }
 
 void AEchoHUD::DrawWhipTarget()
@@ -141,4 +112,39 @@ void AEchoHUD::DrawReticle()
 	DrawLine(CX, CY - Gap - Len, CX, CY - Gap, Color, 2.0f);
 	DrawLine(CX, CY + Gap, CX, CY + Gap + Len, Color, 2.0f);
 	DrawRect(Color, CX - 1.5f, CY - 1.5f, 3.0f, 3.0f);
+}
+
+void AEchoHUD::ShowSubtitle(const FText& Text, float Seconds)
+{
+	SubtitleText = Text;
+	SubtitleUntil = GetWorld()->GetRealTimeSeconds() + Seconds;
+}
+
+FString AEchoHUD::GetVisibleSubtitle(float& OutScale) const
+{
+	const UEchoGameUserSettings* Settings = UEchoGameUserSettings::GetEchoSettings();
+	OutScale = Settings ? Settings->SubtitleScale : 1.0f;
+	const bool bShowing = Settings && Settings->bSubtitlesEnabled && GetWorld()->GetRealTimeSeconds() < SubtitleUntil;
+	return bShowing ? SubtitleText.ToString() : FString();
+}
+
+void AEchoHUD::DrawSubtitle()
+{
+	float Scale = 1.0f;
+	const FString Line = GetVisibleSubtitle(Scale);
+	if (Line.IsEmpty())
+	{
+		return;
+	}
+
+	// Centred near the bottom, on a dark band, sized by the Subtitle size setting
+	UFont* Font = GEngine->GetLargeFont();
+	const float SubtitleTextScale = 1.1f * Scale;
+	float Width = 0.0f;
+	float Height = 0.0f;
+	GetTextSize(Line, Width, Height, Font, SubtitleTextScale);
+	const float X = (Canvas->ClipX - Width) * 0.5f;
+	const float Y = Canvas->ClipY * 0.86f - Height;
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), X - 16.0f, Y - 8.0f, Width + 32.0f, Height + 16.0f);
+	DrawText(Line, FLinearColor::White, X, Y, Font, SubtitleTextScale);
 }

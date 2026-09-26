@@ -72,3 +72,59 @@ ALandscape* UEchoEditorLibrary::CreateLandscapeFromHeights(FVector Location, FVe
 	return nullptr;
 #endif
 }
+
+#if WITH_EDITOR
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "NiagaraEditorUtilities.h"
+#include "NiagaraEmitter.h"
+#include "NiagaraSpriteRendererProperties.h"
+#include "NiagaraSystem.h"
+#include "NiagaraSystemFactoryNew.h"
+#endif
+
+UObject* UEchoEditorLibrary::CreateNiagaraSystemFromEmitter(const FString& AssetPath, const FString& EmitterPath, UMaterialInterface* SpriteMaterial)
+{
+#if WITH_EDITOR
+	UNiagaraEmitter* Template = LoadObject<UNiagaraEmitter>(nullptr, *EmitterPath);
+	if (!Template)
+	{
+		UE_LOG(LogOurLastEcho, Error, TEXT("CreateNiagaraSystemFromEmitter: emitter %s not found"), *EmitterPath);
+		return nullptr;
+	}
+
+	const FString AssetName = FPackageName::GetShortName(AssetPath);
+	UPackage* Package = CreatePackage(*AssetPath);
+	if (UObject* Existing = FindObject<UObject>(Package, *AssetName))
+	{
+		// Rename the old one out of the way so the new asset can take its name
+		Existing->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+	}
+
+	UNiagaraSystem* System = NewObject<UNiagaraSystem>(Package, *AssetName, RF_Public | RF_Standalone | RF_Transactional);
+	UNiagaraSystemFactoryNew::InitializeSystem(System, true);
+	FNiagaraEditorUtilities::AddEmitterToSystem(*System, *Template, Template->GetExposedVersion().VersionGuid, true);
+
+	for (FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+	{
+		if (FVersionedNiagaraEmitterData* Data = Handle.GetEmitterData())
+		{
+			for (UNiagaraRendererProperties* Renderer : Data->GetRenderers())
+			{
+				if (UNiagaraSpriteRendererProperties* Sprite = Cast<UNiagaraSpriteRendererProperties>(Renderer); Sprite && SpriteMaterial)
+				{
+					Sprite->Material = SpriteMaterial;
+				}
+			}
+		}
+	}
+
+	System->RequestCompile(false);
+	System->WaitForCompilationComplete();
+	FAssetRegistryModule::AssetCreated(System);
+	Package->MarkPackageDirty();
+	UE_LOG(LogOurLastEcho, Log, TEXT("CreateNiagaraSystemFromEmitter: made %s from %s"), *AssetPath, *EmitterPath);
+	return System;
+#else
+	return nullptr;
+#endif
+}

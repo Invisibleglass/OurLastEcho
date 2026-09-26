@@ -128,6 +128,12 @@ protected:
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
 
+	/** Called for mouse look input */
+	void MouseLook(const FInputActionValue& Value);
+
+	/** Applies the look sensitivity and Invert Y settings, then DoLook */
+	void ApplyLook(FVector2D LookAxisVector, bool bGamepad);
+
 public:
 
 	/** Handles move inputs from either controls or UI interfaces */

@@ -38,20 +38,6 @@ public:
 
 	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
 
-	/** A player opened/closed the settings menu. The game is paused for everyone while anyone has it open */
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Echo|Settings Menu")
-	void SetPlayerInSettingsMenu(APlayerController* PlayerController, bool bOpen);
-
+	/** In an online game, when the other player leaves, the host returns to the title screen too, with a message */
 	virtual void Logout(AController* Exiting) override;
-
-protected:
-
-	/** Players with the settings menu open (server only) */
-	TArray<TWeakObjectPtr<APlayerController>> PlayersInSettingsMenu;
-
-	/** Pauses or unpauses to match PlayersInSettingsMenu, and tells the game state who's in the menu */
-	void RefreshSettingsMenuPause();
-
-	/** FCanUnpause for our pause: only once nobody has the menu open */
-	bool CanUnpauseSettingsMenu() const;
 };

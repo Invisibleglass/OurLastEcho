@@ -18,6 +18,8 @@
 #include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "EchoAnchorPoint.h"
+#include "EchoCameraShake.h"
+#include "EchoGameUserSettings.h"
 #include "EchoArrow.h"
 #include "EchoTypes.h"
 #include "OurLastEcho.h"
@@ -161,12 +163,25 @@ void UEchoSpiritBowComponent::SetupPlayerInput(UEnhancedInputComponent* Input)
 
 void UEchoSpiritBowComponent::OnAimStarted()
 {
-	SetAiming(true);
+	// Settings > Controls > Aim: hold the button, or press to start and press again to stop
+	const UEchoGameUserSettings* Settings = UEchoGameUserSettings::GetEchoSettings();
+	if (Settings && Settings->AimMode == EEchoAimMode::Toggle)
+	{
+		SetAiming(!bAiming);
+	}
+	else
+	{
+		SetAiming(true);
+	}
 }
 
 void UEchoSpiritBowComponent::OnAimCompleted()
 {
-	SetAiming(false);
+	const UEchoGameUserSettings* Settings = UEchoGameUserSettings::GetEchoSettings();
+	if (!Settings || Settings->AimMode == EEchoAimMode::Hold)
+	{
+		SetAiming(false);
+	}
 }
 
 void UEchoSpiritBowComponent::OnFirePressed()
@@ -283,6 +298,9 @@ bool UEchoSpiritBowComponent::Fire()
 	const FVector Target = bHit ? Hit.ImpactPoint : TraceEnd;
 
 	LastFireTime = GetWorld()->GetTimeSeconds();
+
+	// A small kick on the archer's own camera (scaled by Reduce Camera Shake)
+	UEchoCameraShake::Play(Cast<APlayerController>(Character->GetController()), 1.0f);
 
 	if (Character->HasAuthority())
 	{

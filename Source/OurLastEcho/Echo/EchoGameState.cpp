@@ -15,14 +15,6 @@ void AEchoGameState::SetMilestoneComplete()
 	bMilestoneComplete = true;
 }
 
-void AEchoGameState::SetPlayersInSettingsMenu(const TArray<APlayerState*>& Players)
-{
-	if (HasAuthority())
-	{
-		PlayersInSettingsMenu = TArray<TObjectPtr<APlayerState>>(Players);
-		ForceNetUpdate();
-	}
-}
 
 void AEchoGameState::SetDebugShowAllPlatforms(bool bShow)
 {
@@ -40,5 +32,4 @@ void AEchoGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 	DOREPLIFETIME(AEchoGameState, bMilestoneComplete);
 	DOREPLIFETIME(AEchoGameState, bDebugShowAllPlatforms);
-	DOREPLIFETIME(AEchoGameState, PlayersInSettingsMenu);
 }

@@ -14,6 +14,14 @@ public class OurLastEcho : ModuleRules
 			"Engine",
 			"InputCore",
 			"NetCore",
+			"CommonUI",
+			"CommonInput",
+			"OnlineSubsystem",
+			"OnlineSubsystemUtils",
+			"Niagara",
+			"EngineCameras",
+			"GameplayTags",
+			"CinematicCamera",
 			"EnhancedInput",
 			"AIModule",
 			"StateTreeModule",
@@ -27,12 +35,15 @@ public class OurLastEcho : ModuleRules
 		// Editor-only builder helpers (EchoEditorLibrary)
 		if (Target.bBuildEditor)
 		{
-			PrivateDependencyModuleNames.Add("UnrealEd");
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "NiagaraEditor" });
 		}
 
 		PublicIncludePaths.AddRange(new string[] {
 			"OurLastEcho",
 			"OurLastEcho/Echo",
+			"OurLastEcho/Echo/FrontEnd",
+			"OurLastEcho/Echo/Settings",
+			"OurLastEcho/Echo/UI",
 			"OurLastEcho/Variant_Platforming",
 			"OurLastEcho/Variant_Platforming/Animation",
 			"OurLastEcho/Variant_Combat",

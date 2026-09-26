@@ -14,6 +14,7 @@
 #include "EchoGameState.h"
 #include "EchoSpiritBowComponent.h"
 #include "EchoSwordWhipComponent.h"
+#include "EchoGameUserSettings.h"
 #include "EchoCharacterMovementComponent.h"
 
 AOurLastEchoCharacter::AOurLastEchoCharacter(const FObjectInitializer& ObjectInitializer)
@@ -159,7 +160,7 @@ void AOurLastEchoCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AOurLastEchoCharacter::Move);
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AOurLastEchoCharacter::Look);
+		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AOurLastEchoCharacter::MouseLook);
 
 		// Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AOurLastEchoCharacter::Look);
@@ -188,7 +189,26 @@ void AOurLastEchoCharacter::Move(const FInputActionValue& Value)
 void AOurLastEchoCharacter::Look(const FInputActionValue& Value)
 {
 	// input is a Vector2D
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
+	// Gamepad stick (IA_Look)
+	ApplyLook(Value.Get<FVector2D>(), true);
+}
+
+void AOurLastEchoCharacter::MouseLook(const FInputActionValue& Value)
+{
+	ApplyLook(Value.Get<FVector2D>(), false);
+}
+
+void AOurLastEchoCharacter::ApplyLook(FVector2D LookAxisVector, bool bGamepad)
+{
+	// The player's sensitivity (mouse or gamepad, lower while aiming the bow) and Invert Y
+	if (const UEchoGameUserSettings* Settings = UEchoGameUserSettings::GetEchoSettings())
+	{
+		LookAxisVector *= Settings->GetLookScale(bGamepad, SpiritBow->IsAiming());
+		if (Settings->bInvertY)
+		{
+			LookAxisVector.Y = -LookAxisVector.Y;
+		}
+	}
 
 	// route the input
 	DoLook(LookAxisVector.X, LookAxisVector.Y);

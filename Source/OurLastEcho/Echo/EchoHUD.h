@@ -53,6 +53,19 @@ protected:
 
 	void DrawWhipTarget();
 
-	/** While paused, tells the player who DIDN'T open the menu who did */
-	void DrawPausedBanner();
+	/** Subtitle line at the bottom of the screen (respects the Subtitles and Subtitle size settings) */
+	void DrawSubtitle();
+
+	FText SubtitleText;
+	float SubtitleUntil = 0.0f;
+
+public:
+
+	/** Shows a subtitle for Seconds (nothing shows if subtitles are off) */
+	UFUNCTION(BlueprintCallable, Category="Echo|Subtitles")
+	void ShowSubtitle(const FText& Text, float Seconds = 4.0f);
+
+	/** The subtitle on screen right now, and its text scale (for tests); empty if none is showing */
+	UFUNCTION(BlueprintPure, Category="Echo|Subtitles")
+	FString GetVisibleSubtitle(float& OutScale) const;
 };
