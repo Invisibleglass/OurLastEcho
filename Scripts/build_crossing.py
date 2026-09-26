@@ -58,12 +58,18 @@ OVERHANG_3 = dict(s0=14000, s1=14400, u0=-1500, u1=900, bottom=1850, top=2500)
 ARCH = dict(s0=10250, s1=12450, bottom=1750, top=2600, curtain_bottom=1150, curtain_depth=150)
 
 # Anchor targets (label, station, height of the surface they're on); all on undersides at PATH_U, facing down
+# Each hangs upright just under its surface, on a rock mount reaching up into it, and faces across the canyon at
+# Bat's shelf: the last value is the shelf station it faces, or a fixed (yaw, pitch, x, y) placement. Target 1 was
+# placed by hand in the editor: at the overhang's front edge, facing the start of the shelf, where Bat shoots it from.
 TARGETS = [
-    ("Target_1_Overhang", 8450, OVERHANG_1["bottom"]),
-    ("Target_2_ArchFront", 10600, ARCH["bottom"]),
-    ("Target_3_ArchBack", 12200, ARCH["bottom"]),
-    ("Target_4_Overhang", 14200, OVERHANG_3["bottom"]),
+    ("Target_1_Overhang", 8450, OVERHANG_1["bottom"], (127.4, -3.9, 8816.0, -597.0)),
+    ("Target_2_ArchFront", 10600, ARCH["bottom"], 10600),
+    ("Target_3_ArchBack", 12200, ARCH["bottom"], 12200),
+    ("Target_4_Overhang", 14200, OVERHANG_3["bottom"], 14200),
 ]
+TARGET_HANG_GAP = 10.0            # between a board's top edge and the rock above it
+TARGET_MOUNT_EMBED = 30.0         # how far the mount reaches into the rock above
+TARGET_MAX_TILT = 10.0            # boards tilt down towards the shelf by at most this (they stay nearly upright)
 
 # Gate wall across the canyon at the chasm's far edge, with a doorway for each of them
 GATE = dict(s0=CHASM_S1, s1=CHASM_S1 + 400, top=1500)
@@ -245,13 +251,31 @@ def build_rock(rock):
 
 
 def build_targets():
-    for label, s, surface_z in TARGETS:
-        x, y = left_xy(s, PATH_U)
-        # Facing straight down out of the underside (+X is the direction the target faces)
-        t = spawn(unreal.EchoAnchorTarget, (x, y, surface_z), (-90.0, wall_yaw(s), 0.0), label, "Crossing/Targets")
+    for label, s, surface_z, yaw, pitch, loc, reach in target_placements():
+        t = spawn(unreal.EchoAnchorTarget, loc, (pitch, yaw, 0.0), label, "Crossing/Targets")
         t.set_editor_property("diameter", TARGET_DIAMETER)
         t.set_editor_property("thickness", TARGET_THICKNESS)
+        t.set_editor_property("mount_reach_up", reach)
     log(f"targets: {len(TARGETS)}")
+
+
+def target_placements():
+    """(label, station, surface height, yaw, pitch, location, mount reach) for each target: hanging upright under
+    its surface at Saraa's swing line, facing Bat's shelf"""
+    shelf_z = shelf_top() + 140.0     # Bat's chest on his shelf
+    shelf_r = (SHELF["r0"] + SHELF["r1"]) / 2
+    result = []
+    for label, s, surface_z, aim in TARGETS:
+        x, y = left_xy(s, PATH_U)
+        z = surface_z - TARGET_DIAMETER / 2 - TARGET_HANG_GAP
+        if isinstance(aim, tuple):
+            yaw, pitch, x, y = aim
+        else:
+            ax, ay = right_xy(aim, shelf_r)
+            yaw = math.degrees(math.atan2(ay - y, ax - x))
+            pitch = max(-TARGET_MAX_TILT, min(0.0, math.degrees(math.atan2(shelf_z - z, math.hypot(ax - x, ay - y)))))
+        result.append((label, s, surface_z, yaw, pitch, (x, y, z), surface_z - z + TARGET_MOUNT_EMBED))
+    return result
 
 
 def build_gameplay(top, rock):

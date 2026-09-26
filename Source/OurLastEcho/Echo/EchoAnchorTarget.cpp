@@ -2,13 +2,10 @@
 
 #include "EchoAnchorTarget.h"
 #include "Components/StaticMeshComponent.h"
-#include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "EchoAnchorable.h"
-#include "EchoAnchorPoint.h"
-#include "OurLastEchoCharacter.h"
 #include "EchoTypes.h"
 #include "EchoVisibility.h"
 
@@ -17,7 +14,6 @@ namespace
 	void SetupDisc(UStaticMeshComponent* Disc, UStaticMesh* Mesh)
 	{
 		Disc->SetStaticMesh(Mesh);
-		Disc->SetMobility(EComponentMobility::Movable);
 		Disc->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Disc->SetGenerateOverlapEvents(false);
 		Disc->SetCanEverAffectNavigation(false);
@@ -28,11 +24,11 @@ namespace
 
 AEchoAnchorTarget::AEchoAnchorTarget()
 {
-	// Every frame, for a smooth turn towards Bat
 	PrimaryActorTick.bCanEverTick = true;
+	// Visibility only needs to catch possession changes
+	PrimaryActorTick.TickInterval = 0.1f;
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-	RootComponent->SetMobility(EComponentMobility::Movable);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 
@@ -53,8 +49,21 @@ AEchoAnchorTarget::AEchoAnchorTarget()
 	Bullseye->SetupAttachment(RootComponent);
 	SetupDisc(Bullseye, CylinderMesh.Object);
 
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	Mount = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mount"));
+	Mount->SetupAttachment(RootComponent);
+	Mount->SetStaticMesh(CubeMesh.Object);
+	Mount->SetCanEverAffectNavigation(false);
+	Mount->SetGenerateOverlapEvents(false);
+	// Rock: stops stray arrows like any rock, but nobody stands on it or swings into it
+	Mount->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Mount->SetCollisionObjectType(ECC_WorldStatic);
+	Mount->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Mount->SetCollisionResponseToChannel(ECC_EchoArrow, ECR_Block);
+
 	Anchorable = CreateDefaultSubobject<UEchoAnchorableComponent>(TEXT("Anchorable"));
 
+	MountMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_CanyonRock.MI_CanyonRock")));
 	BoardMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_AnchorTargetBoard.MI_AnchorTargetBoard")));
 	RingMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_AnchorTargetRing.MI_AnchorTargetRing")));
 }
@@ -71,6 +80,23 @@ void AEchoAnchorTarget::OnConstruction(const FTransform& Transform)
 	Ring->SetRelativeLocation(FVector(Thickness + 0.5f, 0.0f, 0.0f));
 	Bullseye->SetRelativeScale3D(FVector(BoardScale * 0.3f, BoardScale * 0.3f, 0.03f));
 	Bullseye->SetRelativeLocation(FVector(Thickness + 1.0f, 0.0f, 0.0f));
+
+	// The mount: a block behind the board, a bit wider than it, reaching MountReachUp above its centre
+	Mount->SetVisibility(bMount);
+	Mount->SetCollisionEnabled(bMount ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+	if (bMount)
+	{
+		const float Width = Diameter * 1.3f;
+		const float Bottom = -Width * 0.5f;
+		const float Top = FMath::Max(Width * 0.5f, MountReachUp);
+		Mount->SetRelativeScale3D(FVector(MountDepth, Width, Top - Bottom) / 100.0f);
+		Mount->SetRelativeLocation(FVector(-MountDepth * 0.5f, 0.0f, (Top + Bottom) * 0.5f));
+		Mount->SetRelativeRotation(FRotator::ZeroRotator);
+		if (UMaterialInterface* MountMat = MountMaterial.LoadSynchronous())
+		{
+			Mount->SetMaterial(0, MountMat);
+		}
+	}
 
 	UMaterialInterface* BoardMat = BoardMaterial.LoadSynchronous();
 	UMaterialInterface* RingMat = RingMaterial.LoadSynchronous();
@@ -89,7 +115,6 @@ void AEchoAnchorTarget::BeginPlay()
 {
 	Super::BeginPlay();
 
-	RestRotation = GetActorQuat();
 	UpdateLocalVisibility();
 }
 
@@ -98,61 +123,6 @@ void AEchoAnchorTarget::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	UpdateLocalVisibility();
-	UpdateFacing(DeltaSeconds);
-}
-
-void AEchoAnchorTarget::UpdateFacing(float DeltaSeconds)
-{
-	if (!bFaceBat || HasAnchorOnFace())
-	{
-		return;
-	}
-
-	if (!Bat.IsValid())
-	{
-		for (AOurLastEchoCharacter* Character : TActorRange<AOurLastEchoCharacter>(GetWorld()))
-		{
-			if (Character->GetRealm() == EEchoRealm::Living)
-			{
-				Bat = Character;
-				break;
-			}
-		}
-		if (!Bat.IsValid())
-		{
-			return;
-		}
-	}
-
-	// Towards his chest, but no further than MaxTurnAngle from the placed facing
-	const FVector RestForward = RestRotation.GetForwardVector();
-	FVector Desired = (Bat->GetActorLocation() + FVector(0.0f, 0.0f, 40.0f) - GetActorLocation()).GetSafeNormal();
-	if (Desired.IsNearlyZero())
-	{
-		return;
-	}
-	const float Angle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(RestForward, Desired), -1.0f, 1.0f)));
-	if (Angle > MaxTurnAngle)
-	{
-		const FQuat Full = FQuat::FindBetweenNormals(RestForward, Desired);
-		Desired = FQuat::Slerp(FQuat::Identity, Full, MaxTurnAngle / Angle).RotateVector(RestForward);
-	}
-
-	const FRotator Target = FRotationMatrix::MakeFromX(Desired).Rotator();
-	SetActorRotation(FMath::RInterpTo(GetActorRotation(), Target, DeltaSeconds, TurnSpeed));
-}
-
-bool AEchoAnchorTarget::HasAnchorOnFace() const
-{
-	const FVector Face = GetFaceCenter();
-	for (const AEchoAnchorPoint* Anchor : TActorRange<AEchoAnchorPoint>(GetWorld()))
-	{
-		if (FVector::DistSquared(Anchor->GetActorLocation(), Face) < FMath::Square(Diameter))
-		{
-			return true;
-		}
-	}
-	return false;
 }
 
 FVector AEchoAnchorTarget::GetFaceCenter() const
