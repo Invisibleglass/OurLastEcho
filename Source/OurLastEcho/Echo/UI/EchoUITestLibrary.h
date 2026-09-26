@@ -8,6 +8,7 @@
 #include "EchoUITestLibrary.generated.h"
 
 class UWidget;
+class APlayerController;
 
 /**
  *  Sends real input to the UI through Slate, for the front-end tests: key presses (keyboard or gamepad buttons,
@@ -43,6 +44,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Echo|Test")
 	static void QueueKey(FKey Key);
+
+	/** Runs a console command on this player controller on the next engine tick (outside Python, for the same reason) */
+	UFUNCTION(BlueprintCallable, Category="Echo|Test")
+	static void QueueConsoleCommand(APlayerController* PlayerController, const FString& Command);
 
 	/**
 	 *  Moves the window the widget is in (e.g. the second PIE player's window) to a screen position. That window

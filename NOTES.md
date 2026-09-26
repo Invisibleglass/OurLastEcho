@@ -2,7 +2,7 @@
 
 Branch: `milestone-5-title-screen`, branched from `milestone-4-sword-whip` (Milestone 4 isn't merged into `main` yet, as asked). Nothing was pushed. Built with the editor open, driven through its MCP server.
 
-**In short:** the game now starts on a title screen. From there one player hosts over LAN, the other joins, both ready up in a lobby, and the host starts the Spirit Path. Settings (graphics, audio, controls, accessibility) are saved per machine, and there's an in-game menu that doesn't pause the online game.
+**In short:** the game now starts on a title screen. From there one player hosts over LAN, the other joins, both ready up in a lobby, and the host starts the Spirit Path. Settings (graphics, audio, controls, accessibility) are saved per machine, and there's an in-game menu that pauses the game for both players.
 
 ## What was built
 
@@ -80,10 +80,26 @@ Where the brief offered a choice, I picked the simplest option. Each choice is n
 
 **6. In-game menu:**
 - **Opening it:** Esc / P / gamepad Start opens Resume, Settings and Leave Game.
-- **It doesn't pause:** the world keeps running for both players, and the other player isn't affected.
+- **It pauses for both players** (changed after testing; the brief asked for no pause, but you preferred the Milestone 4 behaviour).
+  - The game stays paused until everyone who opened the menu has closed it.
+  - The other player's screen dims and says who paused ("Paused - Bat paused the game"). They can open their own menu too.
+  - If a player leaves while the game is paused, the pause ends with them.
 - **Settings** opens the same settings screen as the title menu.
 - **Leave Game** asks first, then returns both players to the title screen. The other player is told why (see the table above).
-- **Replaced:** the Milestone 4 settings/pause menu (which paused both players) was removed, along with its widget and scripts.
+- **Replaced:** the Milestone 4 settings/pause menu widget and its scripts were removed. This menu replaces it and keeps its pause-for-both behaviour.
+
+**Changes after your playtest** (Milestone 4 mechanics):
+- **The whip holds straight away:**
+  - Its length is exactly Saraa's distance to the anchor when she latches (the old 3 m minimum left it slack), and it shortens if she keeps moving in.
+  - The latch push goes along the swing, not at the anchor.
+  - The whip line reaches the anchor instantly.
+  - Server corrections carry the whip's length, so online prediction stays exact (still 0 corrections).
+- **Anchor targets:**
+  - They hang upright just under the overhangs and the arch, facing across the canyon at Bat's shelf. Target 1 keeps your hand placement.
+  - Each board sits on a rock mount that reaches up into the rock (`bMount`, `MountReachUp`, `MountDepth` on each target), so boards don't float or clip.
+  - `build_crossing.py` places them this way.
+- **Pillar 2:** one arch anchor can now just reach it. You accepted that for this greybox level, so the test logs it instead of failing.
+- **The in-game menu pauses both players again** (see 6 above).
 
 **Gameplay hooks for the new settings:** the character's look input uses the sensitivities and invert Y. The bow uses hold/toggle aim and plays a (reducible) camera shake when firing. The HUD can show subtitles at the chosen size (test with the console command `EchoSubtitle Hello`).
 
@@ -110,12 +126,12 @@ Where the brief offered a choice, I picked the simplest option. Each choice is n
 | Suite | Checks |
 |---|---|
 | Title scene, menus and settings | 52/52 |
-| Hosting, joining, lobby and in-game menu | 32/32 |
+| Hosting, joining, lobby and in-game menu | 34/34 |
 | Two real game processes over LAN | host PASS, guest PASS |
 | Milestone 1 | 29/29 |
 | Milestone 2 | 34/34 |
 | Milestone 3 | 60/60 |
-| The Crossing (Milestone 4) | 68/68 |
+| The Crossing (Milestone 4) | 67/67 (the pillar 2 check is now a logged note) |
 | Headless end-to-end (`run_spirit_path_test.ps1`) | PASS |
 
 Details, and the bugs the tests caught, are in TEST_REPORT.md.

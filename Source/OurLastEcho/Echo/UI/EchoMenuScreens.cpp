@@ -427,7 +427,7 @@ void UEchoCreditsScreen::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 void UEchoPauseMenuScreen::BuildContent(UVerticalBox* Content)
 {
 	AddTitle(Content, LOCTEXT("PauseTitle", "Menu"), 34);
-	AddText(Content, LOCTEXT("PauseHint", "The game keeps going while this is open."), 16, EchoUI::DimTextColor);
+	AddText(Content, LOCTEXT("PauseHint", "The game is paused for both of you."), 16, EchoUI::DimTextColor);
 	AddSpacer(Content, 16.0f);
 
 	AddButton(Content, LOCTEXT("Resume", "Resume"), [this]() { DeactivateWidget(); });

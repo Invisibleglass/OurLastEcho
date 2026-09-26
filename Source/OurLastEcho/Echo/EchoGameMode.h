@@ -40,4 +40,17 @@ public:
 
 	/** In an online game, when the other player leaves, the host returns to the title screen too, with a message */
 	virtual void Logout(AController* Exiting) override;
+
+	/**
+	 *  A player opened or closed their in-game menu. The game is paused for everyone while anyone has it open
+	 *  (the engine's pause, which replicates), and resumes once nobody does.
+	 */
+	void SetPlayerInPauseMenu(APlayerController* PlayerController, bool bOpen);
+
+protected:
+
+	bool CanUnpauseMenu() const;
+	void RefreshMenuPause();
+
+	TArray<TWeakObjectPtr<APlayerController>> PlayersInPauseMenu;
 };

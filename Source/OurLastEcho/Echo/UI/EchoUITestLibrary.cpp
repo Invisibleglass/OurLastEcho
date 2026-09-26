@@ -7,6 +7,7 @@
 #include "Input/Events.h"
 #include "Containers/Ticker.h"
 #include "Widgets/SWindow.h"
+#include "GameFramework/PlayerController.h"
 
 bool UEchoUITestLibrary::SendKey(FKey Key)
 {
@@ -107,6 +108,19 @@ void UEchoUITestLibrary::QueueKey(FKey Key)
 	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Key](float)
 	{
 		SendKey(Key);
+		return false;
+	}));
+}
+
+void UEchoUITestLibrary::QueueConsoleCommand(APlayerController* PlayerController, const FString& Command)
+{
+	TWeakObjectPtr<APlayerController> WeakPC(PlayerController);
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakPC, Command](float)
+	{
+		if (APlayerController* PC = WeakPC.Get())
+		{
+			PC->ConsoleCommand(Command);
+		}
 		return false;
 	}));
 }

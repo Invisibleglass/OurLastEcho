@@ -198,13 +198,13 @@ Run on branch `milestone-5-title-screen` straight after branching from `mileston
 | Saved and loaded | ✅ Pass | The values are in `GameUserSettings.ini` and come back after reloading the file. The J rebinding is still there when Settings reopens. |
 | Host, find, join | ✅ Pass | The host's lobby opens on a listen server. The guest finds the game and joins. Both lobbies list Bat (host) and Saraa with "(you)" on the right line. |
 | Ready and Start | ✅ Pass | Start is hidden for the guest and disabled for the host until both are ready. Ready shows on both screens. Start takes both into Lvl_SpiritPath with pawns: **host = Bat, guest = Saraa**. |
-| In-game menu | ✅ Pass | Opens with Resume, Settings, Leave Game. **The game doesn't pause:** both worlds keep running and the clock advances. Settings opens; Resume closes the menu. |
+| In-game menu | ✅ Pass | Opens with Resume, Settings, Leave Game. **The game pauses for both players** (after the playtest; see *Follow-up changes*): both worlds pause, and the host knows who paused. Settings opens; Resume closes the menu and both worlds resume. |
 | Leaving | ✅ Pass | Guest leaves the game → both on the title, host told "Saraa left the game." Host leaves the game → both on the title, guest told "The host left the game." Host leaves the lobby → guest told the same. |
 | Joining fails | ✅ Pass | Joining a game that closed after it was listed → "Couldn't connect to that game. It may have closed." after 15 s. OK returns to the Join list. With nobody hosting, the list is empty and says so. |
 | **Two real game processes over LAN** | ✅ Pass | Host: title → EchoHost → lobby → guest joins → both ready → Start → Lvl_SpiritPath as Bat. Guest: Play → Join Game → the game is listed → joins → Ready → arrives as Saraa. |
 | Earlier mechanics still work | ✅ Pass | Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, The Crossing 68/68, and the headless end-to-end test PASS. The old menu test was retired along with the old menu (its replacement is covered above). |
 
-**Totals:** title 52/52, online 32/32, LAN two-process PASS/PASS, Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, The Crossing 68/68, headless PASS.
+**Totals:** title 52/52, online 34/34 (after the follow-up changes), LAN two-process PASS/PASS, Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, The Crossing 68/68 (67 after the pillar 2 check became a note), headless PASS.
 
 ### Bugs the tests caught (all fixed)
 
@@ -225,3 +225,16 @@ Run on branch `milestone-5-title-screen` straight after branching from `mileston
 - **`-nullrhi` games can't drive the menus:** nothing is drawn, so CommonUI's screen transitions never finish. The LAN test runs two small windows at the Low preset. At full quality, two copies overloaded this 6 GB GPU to a few frames per second.
 - **Live Coding broke a gameplay console variable** after one patch (unity builds put unrelated files in one patch), which crashed the host at map load. A full rebuild fixed it. Full rebuilds were used before every multiplayer run after that.
 - **Editor crash in the derived-data cache** (as in Milestone 4). The editor is now launched with `-DDC=NoZenLocalFallback` (`Scripts/tools/launch_editor.ps1`), and it hasn't recurred.
+
+### Follow-up changes after the playtest
+
+Changes requested after the user played the milestone, each followed by a full rebuild and re-test:
+
+| Change | Test result |
+|---|---|
+| **The whip holds from the latch.** Its length is Saraa's distance to the anchor (no 3 m minimum); it shortens as she moves in; the latch push goes along the swing; the line reaches the anchor instantly. Corrections carry the whip length. | The Crossing: all three swings land, **0 corrections**. The "anchor removed under her" case still gives the one expected correction. |
+| **Anchor targets hang upright, facing Bat's shelf, on rock mounts** (target 1 as placed by hand). Briefly they turned to face Bat live; that was replaced after it clipped into the rock. | The Crossing: every anchor lands on its target, and all swings land from the new anchor positions. Checked in screenshots from Bat's side. |
+| **Pillar 2 reachable with one arch anchor:** accepted for this greybox level, so the check is now a logged note. | Best single-anchor landing: station 13018 (pillar starts at 12950). |
+| **The in-game menu pauses both players again** (the user's choice, overriding the brief). | Online test **34/34**: both worlds pause, the host knows who paused, Resume unpauses both, and leaving while paused still returns both to the title with a message. |
+
+After these: title 52/52, online 34/34, Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, The Crossing 67/67. Editor and Game builds: 0 warnings.

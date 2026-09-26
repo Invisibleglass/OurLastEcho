@@ -57,7 +57,7 @@ public:
 
 	AOurLastEchoPlayerController();
 
-	/** Shows the in-game menu over the game. The game keeps running (it's online) */
+	/** Shows the in-game menu over the game, and pauses the game for both players until everyone closes theirs */
 	UFUNCTION(BlueprintCallable, Category="Echo|Menu")
 	void OpenPauseMenu();
 
@@ -95,4 +95,13 @@ protected:
 
 	/** Back to game input once the last menu screen closes */
 	void HandleMenusClosed();
+
+	/** Tells the server this player's menu is open or closed (it pauses the game while any player's is) */
+	void SetInPauseMenu(bool bOpen);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetInPauseMenu(bool bOpen);
+
+	/** What the server was last told, so it's only told about changes */
+	bool bToldServerMenuOpen = false;
 };

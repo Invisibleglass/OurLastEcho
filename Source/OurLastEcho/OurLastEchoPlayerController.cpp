@@ -11,6 +11,7 @@
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
+#include "EchoGameMode.h"
 #include "EchoGameUserSettings.h"
 #include "EchoHUD.h"
 #include "EchoMenuScreens.h"
@@ -151,8 +152,9 @@ void AOurLastEchoPlayerController::OpenPauseMenu()
 		EchoCharacter->GetSpiritBow()->SetAiming(false);
 	}
 
-	// The menu takes input (CommonUI switches to menu input and shows the cursor); the world keeps running
+	// The menu takes input (CommonUI switches to menu input and shows the cursor), and the game pauses for both
 	UIRoot->Push<UEchoPauseMenuScreen>();
+	SetInPauseMenu(true);
 }
 
 void AOurLastEchoPlayerController::ClosePauseMenu()
@@ -168,6 +170,32 @@ void AOurLastEchoPlayerController::HandleMenusClosed()
 {
 	SetInputMode(FInputModeGameOnly());
 	SetShowMouseCursor(false);
+	SetInPauseMenu(false);
+}
+
+void AOurLastEchoPlayerController::SetInPauseMenu(bool bOpen)
+{
+	if (bOpen == bToldServerMenuOpen)
+	{
+		return;
+	}
+	bToldServerMenuOpen = bOpen;
+	if (HasAuthority())
+	{
+		ServerSetInPauseMenu_Implementation(bOpen);
+	}
+	else
+	{
+		ServerSetInPauseMenu(bOpen);
+	}
+}
+
+void AOurLastEchoPlayerController::ServerSetInPauseMenu_Implementation(bool bOpen)
+{
+	if (AEchoGameMode* GameMode = GetWorld()->GetAuthGameMode<AEchoGameMode>())
+	{
+		GameMode->SetPlayerInPauseMenu(this, bOpen);
+	}
 }
 
 void AOurLastEchoPlayerController::EchoSubtitle(const FString& Text)

@@ -457,16 +457,19 @@ def online_scenario():
     yield 2.0
     host_realm, guest_realm = pawn(0).get_realm(), pawn(1).get_realm()
     check(host_realm == unreal.EchoRealm.LIVING and guest_realm == unreal.EchoRealm.SPIRIT, f"the host plays Bat, the second player Saraa ({host_realm}, {guest_realm})")
-
+    # In-game menu: shows over the game and pauses it for both players
     # In-game menu: shows over the game, which keeps running
     guest = pc(1)
-    guest.toggle_pause_menu()
+    ui.queue_console_command(guest, "EchoMenu")  # opening it tells the server: must not run inside Python
     ok = yield from wait_for(lambda: top_is(1, "EchoPauseMenuScreen"), 2.0)
     check(ok, "the in-game menu opens (Esc / P / Start)")
+    ok = yield from wait_for(lambda: gs.is_game_paused(world(0)) and gs.is_game_paused(world(1)), 3.0)
     t0 = gs.get_time_seconds(world(0))
     yield 1.0
-    check(not gs.is_game_paused(world(0)) and not gs.is_game_paused(world(1)) and gs.get_time_seconds(world(0)) > t0 + 0.5,
-          "the game doesn't pause (it's online)")
+    check(ok and gs.is_game_paused(world(0)) and gs.is_game_paused(world(1)) and gs.get_time_seconds(world(0)) < t0 + 0.05,
+          f"the game pauses for both players (host {gs.is_game_paused(world(0))}, guest {gs.is_game_paused(world(1))})")
+    in_menu = gs.get_game_state(world(0)).get_players_in_pause_menu()
+    check(len(in_menu) == 1, f"the host knows who paused ({len(in_menu)} player in the menu)")
     labels = [l for l in ("Resume", "Settings", "Leave Game") if button(1, l)]
     check(labels == ["Resume", "Settings", "Leave Game"], f"Resume, Settings, Leave Game ({labels})")
     yield from click(1, "Settings")
@@ -474,12 +477,14 @@ def online_scenario():
     check(ok, "Settings opens from the in-game menu (the same settings screen)")
     press("Gamepad_FaceButton_Right")
     yield from wait_for(lambda: top_is(1, "EchoPauseMenuScreen"), 2.0)
-    yield from click(1, "Resume")
+    yield from click(1, "Resume", queued=True)  # tells the server: must not run inside Python
     ok = yield from wait_for(lambda: not guest.is_pause_menu_open(), 2.0)
     check(ok, "Resume closes the menu and returns to the game")
+    ok = yield from wait_for(lambda: not gs.is_game_paused(world(0)) and not gs.is_game_paused(world(1)), 3.0)
+    check(ok, "and the game resumes for both players")
 
     # The guest leaves: both end up on the title screen, the host with a message
-    guest.toggle_pause_menu()
+    ui.queue_console_command(guest, "EchoMenu")
     yield from wait_for(lambda: top_is(1, "EchoPauseMenuScreen"), 2.0)
     yield from click(1, "Leave Game")
     yield from wait_for(lambda: top_is(1, "EchoDialog"), 2.0)

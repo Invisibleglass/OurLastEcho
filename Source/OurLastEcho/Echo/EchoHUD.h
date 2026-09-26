@@ -56,6 +56,9 @@ protected:
 	/** Subtitle line at the bottom of the screen (respects the Subtitles and Subtitle size settings) */
 	void DrawSubtitle();
 
+	/** While the other player's menu has the game paused: dims the screen and says who paused it */
+	void DrawPausedBanner();
+
 	FText SubtitleText;
 	float SubtitleUntil = 0.0f;
 
