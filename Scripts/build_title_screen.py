@@ -286,7 +286,7 @@ def build_map(leaves):
     shape("Sphere", "Bush", (120, 260, 25), (110, 90, 60), material=leaf_mi, folder="Scene/Tree")
 
     # Bat, seated and facing down the canyon (+X), turned a little away from the camera
-    bat = spawn(unreal.EchoTitleBat, (0, 0, 0), (0.0, 12.0, 0.0), "TitleBat")
+    bat = spawn(unreal.EchoTitleBat, (0, 0, 0), (0.0, 48.0, 0.0), "TitleBat")
     bat.set_folder_path("Scene/Bat")
     pelvis = bat.get_bone_location("pelvis")
     foot = min(bat.get_bone_location("foot_l").z, bat.get_bone_location("foot_r").z)
@@ -296,8 +296,8 @@ def build_map(leaves):
 
     # Camera: behind Bat and to his left, looking down the canyon towards the sun, with Bat on the right third
     # (the menu sits on the left)
-    cam_loc = unreal.Vector(-420, -130, 165)
-    target = unreal.Vector(900, -420, 190)
+    cam_loc = unreal.Vector(-650, -260, 170)
+    target = unreal.Vector(817, 52, 70)
     rot = unreal.MathLibrary.find_look_at_rotation(cam_loc, target)
     camera = spawn(unreal.EchoTitleCamera, (cam_loc.x, cam_loc.y, cam_loc.z), (rot.pitch, rot.yaw, 0.0), "TitleCamera")
     camera.set_folder_path("Scene/Camera")
