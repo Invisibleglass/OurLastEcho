@@ -6,6 +6,7 @@
 #include "Framework/Application/SlateUser.h"
 #include "Input/Events.h"
 #include "Containers/Ticker.h"
+#include "Widgets/SWindow.h"
 
 bool UEchoUITestLibrary::SendKey(FKey Key)
 {
@@ -48,9 +49,23 @@ bool UEchoUITestLibrary::HoverWidget(UWidget* Widget)
 	{
 		return false;
 	}
+	// The mouse lands on whichever window is on top at that point: with two PIE players, the second one's window
+	// can be under the editor, so bring the widget's window to the front first
+	FSlateApplication& Slate = FSlateApplication::Get();
+	if (const TSharedPtr<SWindow> Window = Slate.FindWidgetWindow(Widget->GetCachedWidget().ToSharedRef()))
+	{
+		Window->BringToFront(true);
+	}
+	// Two PIE players share one Slate cursor: a player in game (e.g. Saraa running around) has the mouse captured
+	// by their viewport, and a captured mouse sends every event there, not to the other player's menu. (On real
+	// separate machines each player has their own mouse.)
+	if (Slate.HasAnyMouseCaptor() && !Widget->GetCachedWidget()->HasMouseCapture())
+	{
+		Slate.ReleaseAllPointerCapture();
+	}
+
 	// Two moves, like a real mouse: CommonUI ignores the first move after gamepad input (and any move with no
 	// distance), and only switches to mouse mode on a move it counts
-	FSlateApplication& Slate = FSlateApplication::Get();
 	const FVector2D Near = Centre + FVector2D(4.0f, 3.0f);
 	const FVector2D Last = Slate.GetCursorPos();
 	Slate.SetCursorPos(Near);
@@ -94,6 +109,21 @@ void UEchoUITestLibrary::QueueKey(FKey Key)
 		SendKey(Key);
 		return false;
 	}));
+}
+
+bool UEchoUITestLibrary::MoveWidgetWindow(UWidget* Widget, FVector2D ScreenPosition)
+{
+	if (!FSlateApplication::IsInitialized() || !Widget || !Widget->GetCachedWidget().IsValid())
+	{
+		return false;
+	}
+	const TSharedPtr<SWindow> Window = FSlateApplication::Get().FindWidgetWindow(Widget->GetCachedWidget().ToSharedRef());
+	if (!Window.IsValid())
+	{
+		return false;
+	}
+	Window->MoveWindowTo(ScreenPosition);
+	return true;
 }
 
 bool UEchoUITestLibrary::HasFocus(UWidget* Widget)

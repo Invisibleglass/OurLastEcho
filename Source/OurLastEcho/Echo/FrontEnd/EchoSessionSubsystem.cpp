@@ -1,6 +1,7 @@
 // Our Last Echo
 
 #include "EchoSessionSubsystem.h"
+#include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -30,6 +31,7 @@ void UEchoSessionSubsystem::Deinitialize()
 		Sessions->ClearOnFindSessionsCompleteDelegate_Handle(FindHandle);
 		Sessions->ClearOnJoinSessionCompleteDelegate_Handle(JoinHandle);
 	}
+	FTSTicker::RemoveTicker(JoinTimeoutHandle);
 	Super::Deinitialize();
 }
 
@@ -263,9 +265,38 @@ void UEchoSessionSubsystem::HandleJoinComplete(FName SessionName, EOnJoinSession
 		return;
 	}
 
+	// Success is reported by arriving in the host's lobby (this world, and the Join screen, get replaced); until
+	// then the Join screen keeps showing "Joining...", and CheckJoinTimeout reports a host that never answers
 	UE_LOG(LogOurLastEcho, Log, TEXT("Sessions: joined, travelling to %s"), *Url);
-	OnJoinComplete.Broadcast(true, FText::GetEmpty());
 	PC->ClientTravel(Url, TRAVEL_Absolute);
+	JoinStartedAt = FPlatformTime::Seconds();
+	FTSTicker::RemoveTicker(JoinTimeoutHandle);
+	JoinTimeoutHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UEchoSessionSubsystem::CheckJoinTimeout), 0.5f);
+}
+
+bool UEchoSessionSubsystem::CheckJoinTimeout(float DeltaTime)
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	FWorldContext* Context = GameInstance ? GameInstance->GetWorldContext() : nullptr;
+	const bool bConnecting = Context && (Context->PendingNetGame || !Context->TravelURL.IsEmpty());
+	if (!bConnecting)
+	{
+		// Connected (or failed, which the game instance reports): nothing more to do
+		JoinTimeoutHandle.Reset();
+		return false;
+	}
+	if (FPlatformTime::Seconds() - JoinStartedAt < JoinConnectTimeout)
+	{
+		return true;
+	}
+
+	UE_LOG(LogOurLastEcho, Warning, TEXT("Sessions: the host didn't answer in %.0f s, giving up on the join"), JoinConnectTimeout);
+	JoinTimeoutHandle.Reset();
+	GEngine->CancelPending(Context->World());
+	Context->TravelURL.Empty();
+	LeaveSession();
+	OnJoinComplete.Broadcast(false, LOCTEXT("JoinNoAnswer", "Couldn't connect to that game. It may have closed."));
+	return false;
 }
 
 #undef LOCTEXT_NAMESPACE

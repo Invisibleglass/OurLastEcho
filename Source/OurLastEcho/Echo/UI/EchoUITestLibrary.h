@@ -44,6 +44,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Echo|Test")
 	static void QueueKey(FKey Key);
 
+	/**
+	 *  Moves the window the widget is in (e.g. the second PIE player's window) to a screen position. That window
+	 *  floats above the editor, so where it overlaps the first player's viewport it catches that player's clicks.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Echo|Test")
+	static bool MoveWidgetWindow(UWidget* Widget, FVector2D ScreenPosition);
+
 	/** Does the widget or one of its children have keyboard/gamepad focus? */
 	UFUNCTION(BlueprintPure, Category="Echo|Test")
 	static bool HasFocus(UWidget* Widget);

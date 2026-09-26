@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Ticker.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Interfaces/OnlineSessionInterface.h"
 #include "EchoSessionSubsystem.generated.h"
@@ -113,4 +114,15 @@ private:
 	FDelegateHandle DestroyHandle;
 	FDelegateHandle FindHandle;
 	FDelegateHandle JoinHandle;
+
+	/** Gives up on a join whose connection hasn't been made after JoinConnectTimeout (the game may have closed
+	 *  since it was listed; the engine's own connect timeout is minutes) */
+	bool CheckJoinTimeout(float DeltaTime);
+	FTSTicker::FDelegateHandle JoinTimeoutHandle;
+	double JoinStartedAt = 0.0;
+
+public:
+
+	/** Seconds to wait for the host to answer before telling the player the join failed */
+	static constexpr double JoinConnectTimeout = 15.0;
 };

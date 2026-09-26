@@ -37,7 +37,7 @@ def check(ok, text):
 
 def worlds():
     """PIE worlds in player order (they're replaced when a player changes map, so fetch them fresh)"""
-    return sorted(unreal.EditorLevelLibrary.get_pie_worlds(False), key=lambda w: w.get_name())
+    return sorted(unreal.EditorLevelLibrary.get_pie_worlds(False), key=lambda w: w.get_path_name())  # /Game/.../UEDPIE_<instance>_<map>
 
 
 def world(index):
@@ -48,6 +48,11 @@ def world(index):
 def pc(index):
     w = world(index)
     return gs.get_player_controller(w, 0) if w else None
+
+
+def pawn(index):
+    w = world(index)
+    return gs.get_player_pawn(w, 0) if w else None
 
 
 def root(index):
@@ -67,7 +72,7 @@ def top_is(index, cls_name):
 
 def map_name(index):
     w = world(index)
-    return w.get_name().split("_", 2)[-1] if w else ""
+    return re.sub(r"^UEDPIE_\d+_", "", w.get_name()) if w else ""
 
 
 def net_mode(index):
@@ -416,6 +421,11 @@ def host_and_join():
 def online_scenario():
     if not check(len(worlds()) == 2 and map_name(0) == "TitleScreen" and map_name(1) == "TitleScreen", "two players on the title screen"):
         return
+    # Park player 2's window in the bottom-right corner: it floats above the editor and would catch clicks meant
+    # for player 1's menus (the window stays put across map changes)
+    moved = ui.move_widget_window(root(1), unreal.Vector2D(1265.0, 500.0))
+    log(f"player 2's window moved out of the way: {moved}")
+    yield 0.5
     ok = yield from host_and_join()
     if not ok:
         return
@@ -438,14 +448,14 @@ def online_scenario():
     check(ok, "Start is enabled once both are ready")
 
     # Start: everyone travels to the game
-    yield from click(0, "Start Game")
+    yield from click(0, "Start Game", queued=True)  # travel sends client RPCs: must not run inside Python
     ok = yield from wait_for(lambda: map_name(0) == "Lvl_SpiritPath" and map_name(1) == "Lvl_SpiritPath"
-                             and pc(0).get_pawn() is not None and pc(1).get_pawn() is not None, 40.0)
-    check(ok, f"Start takes both players into the game ({map_name(0)}, {map_name(1)})")
+                             and pawn(0) is not None and pawn(1) is not None, 40.0)
+    check(ok, f"Start takes both players into the game ({map_name(0)}, {map_name(1)}, pawns {pawn(0) is not None}/{pawn(1) is not None})")
     if not ok:
         return
     yield 2.0
-    host_realm, guest_realm = pc(0).get_pawn().get_realm(), pc(1).get_pawn().get_realm()
+    host_realm, guest_realm = pawn(0).get_realm(), pawn(1).get_realm()
     check(host_realm == unreal.EchoRealm.LIVING and guest_realm == unreal.EchoRealm.SPIRIT, f"the host plays Bat, the second player Saraa ({host_realm}, {guest_realm})")
 
     # In-game menu: shows over the game, which keeps running
@@ -482,7 +492,32 @@ def online_scenario():
         yield from click(0, "OK")
         yield 1.0
 
+    # The host leaves during the game: the guest returns to the title screen with a message
+    ok = yield from host_and_join()
+    if ok:
+        yield from click(0, "Ready")
+        yield from click(1, "Ready", queued=True)
+        yield from wait_for(lambda: button(0, "Start Game").get_is_enabled(), 5.0)
+        yield from click(0, "Start Game", queued=True)
+        ok = yield from wait_for(lambda: map_name(0) == "Lvl_SpiritPath" and map_name(1) == "Lvl_SpiritPath"
+                                 and pawn(0) is not None and pawn(1) is not None, 40.0)
+        check(ok, "a second game starts")
+        yield 2.0
+        pc(0).toggle_pause_menu()
+        yield from wait_for(lambda: top_is(0, "EchoPauseMenuScreen"), 2.0)
+        yield from click(0, "Leave Game")
+        yield from wait_for(lambda: top_is(0, "EchoDialog"), 2.0)
+        yield from click(0, "Leave")
+        ok = yield from wait_for(lambda: map_name(0) == "TitleScreen" and map_name(1) == "TitleScreen" and net_mode(1) == "standalone"
+                                 and top_is(1, "EchoDialog"), 30.0)
+        message = top(1).get_message_text() if top_is(1, "EchoDialog") else ""
+        check(ok and "host left" in message, f"when the host leaves the game, both return to the title screen and the guest is told ({message})")
+        if top_is(1, "EchoDialog"):
+            yield from click(1, "OK")
+        yield 1.0
+
     # The host leaves the lobby: the guest returns to the title screen with a message
+    yield from wait_for(lambda: top_is(0, "EchoMainMenuScreen") and top_is(1, "EchoMainMenuScreen"), 5.0)
     ok = yield from host_and_join()
     if ok:
         yield from click(0, "Leave Lobby")
@@ -494,6 +529,38 @@ def online_scenario():
         if top_is(1, "EchoDialog"):
             yield from click(1, "OK")
         yield 1.0
+
+    # Joining a game that has just closed fails with a message and a way back
+    yield from wait_for(lambda: top_is(0, "EchoMainMenuScreen") and top_is(1, "EchoMainMenuScreen"), 5.0)
+    yield from click(0, "Play")
+    yield from wait_for(lambda: top_is(0, "EchoPlayMenuScreen"), 2.0)
+    yield from click(0, "Host Game")
+    yield from wait_for(lambda: net_mode(0) == "server" and top_is(0, "EchoLobbyScreen"), 20.0)
+    yield 1.0
+    yield from click(1, "Play")
+    yield from wait_for(lambda: top_is(1, "EchoPlayMenuScreen"), 2.0)
+    yield from click(1, "Join Game")
+    yield from wait_for(lambda: top_is(1, "EchoJoinMenuScreen"), 2.0)
+    listed = yield from wait_for(lambda: top(1).get_num_games_listed() >= 1, 10.0)
+    yield from click(0, "Leave Lobby")
+    yield from wait_for(lambda: top_is(0, "EchoDialog"), 2.0)
+    yield from click(0, "Leave")
+    yield from wait_for(lambda: net_mode(0) == "standalone" and top_is(0, "EchoMainMenuScreen"), 20.0)
+    yield 1.0
+    if listed:
+        top(1).join_first_game()
+    ok = yield from wait_for(lambda: net_mode(1) == "standalone" and top_is(1, "EchoDialog") and "connect" in top(1).get_message_text(), 90.0)
+    message = top(1).get_message_text() if top_is(1, "EchoDialog") else (top(1).get_class().get_name() if top(1) else None)
+    check(listed and ok, f"joining a game that has closed fails with a message ({message})")
+    if top_is(1, "EchoDialog"):
+        yield from click(1, "OK")
+    ok = yield from wait_for(lambda: top_is(1, "EchoMainMenuScreen") or top_is(1, "EchoJoinMenuScreen"), 5.0)
+    check(ok, f"and OK leads back to the menus ({top(1).get_class().get_name() if top(1) else None})")
+    for _ in range(3):
+        if top_is(1, "EchoMainMenuScreen") or not button(1, "Back"):
+            break
+        yield from click(1, "Back")
+        yield 0.5
 
     # Nothing to join
     yield from wait_for(lambda: top_is(0, "EchoMainMenuScreen") and top_is(1, "EchoMainMenuScreen"), 5.0)
