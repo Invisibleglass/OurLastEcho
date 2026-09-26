@@ -15,7 +15,8 @@ class UEchoAnchorableComponent;
  *  When Bat's arrow hits it, the arrow sticks and becomes an anchor point (AEchoAnchorPoint) that Saraa
  *  can latch onto with her sword whip.
  *
- *  The actor's +X axis is the direction the target faces (out of the rock). It's present-day wood, so
+ *  The actor's +X axis is the direction the target faces (out of the rock). During play it turns to face Bat
+ *  (bFaceBat), up to MaxTurnAngle from that placed facing. It's present-day wood, so
  *  only Bat sees it (Saraa sees the spirit anchor his arrow makes). The board blocks only the EchoArrow
  *  channel, so arrows and the bow's aim trace hit it but nothing else does.
  *
@@ -48,6 +49,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Anchor Target", meta = (ClampMin = 2))
 	float Thickness = 12.0f;
 
+	/** Turn to face Bat during play, so his arrow goes in straight and Saraa's swing point sits on the arrow */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Anchor Target|Face Bat")
+	bool bFaceBat = true;
+
+	/** Furthest it turns away from how it was placed, in degrees (so it never turns into the rock) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Anchor Target|Face Bat", meta = (ClampMin = 0, ClampMax = 89))
+	float MaxTurnAngle = 60.0f;
+
+	/** How quickly it turns towards him (interpolation speed; higher = snappier) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Anchor Target|Face Bat", meta = (ClampMin = 0.1))
+	float TurnSpeed = 3.0f;
+
 	UPROPERTY(EditAnywhere, Category="Anchor Target|Look")
 	TSoftObjectPtr<UMaterialInterface> BoardMaterial;
 
@@ -74,5 +87,19 @@ protected:
 	/** Bat (Living) sees it; Saraa only with the EchoShowAllPlatforms debug view */
 	void UpdateLocalVisibility();
 
+	/**
+	 *  Turns towards Bat, within MaxTurnAngle of the placed facing. Every machine does this from Bat's position
+	 *  (the server's board is the one arrows hit). It holds still while an anchor sits on it, since anchors stay
+	 *  where the arrow struck and would otherwise float off the board.
+	 */
+	void UpdateFacing(float DeltaSeconds);
+
+	bool HasAnchorOnFace() const;
+
 	bool bLocallyVisible = true;
+
+	/** The facing it was placed with */
+	FQuat RestRotation = FQuat::Identity;
+
+	TWeakObjectPtr<AActor> Bat;
 };

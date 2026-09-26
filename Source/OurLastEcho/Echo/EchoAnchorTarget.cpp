@@ -2,10 +2,13 @@
 
 #include "EchoAnchorTarget.h"
 #include "Components/StaticMeshComponent.h"
+#include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "EchoAnchorable.h"
+#include "EchoAnchorPoint.h"
+#include "OurLastEchoCharacter.h"
 #include "EchoTypes.h"
 #include "EchoVisibility.h"
 
@@ -14,6 +17,7 @@ namespace
 	void SetupDisc(UStaticMeshComponent* Disc, UStaticMesh* Mesh)
 	{
 		Disc->SetStaticMesh(Mesh);
+		Disc->SetMobility(EComponentMobility::Movable);
 		Disc->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Disc->SetGenerateOverlapEvents(false);
 		Disc->SetCanEverAffectNavigation(false);
@@ -24,11 +28,11 @@ namespace
 
 AEchoAnchorTarget::AEchoAnchorTarget()
 {
+	// Every frame, for a smooth turn towards Bat
 	PrimaryActorTick.bCanEverTick = true;
-	// Visibility only needs to catch possession changes
-	PrimaryActorTick.TickInterval = 0.1f;
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	RootComponent->SetMobility(EComponentMobility::Movable);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 
@@ -85,6 +89,7 @@ void AEchoAnchorTarget::BeginPlay()
 {
 	Super::BeginPlay();
 
+	RestRotation = GetActorQuat();
 	UpdateLocalVisibility();
 }
 
@@ -93,6 +98,61 @@ void AEchoAnchorTarget::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	UpdateLocalVisibility();
+	UpdateFacing(DeltaSeconds);
+}
+
+void AEchoAnchorTarget::UpdateFacing(float DeltaSeconds)
+{
+	if (!bFaceBat || HasAnchorOnFace())
+	{
+		return;
+	}
+
+	if (!Bat.IsValid())
+	{
+		for (AOurLastEchoCharacter* Character : TActorRange<AOurLastEchoCharacter>(GetWorld()))
+		{
+			if (Character->GetRealm() == EEchoRealm::Living)
+			{
+				Bat = Character;
+				break;
+			}
+		}
+		if (!Bat.IsValid())
+		{
+			return;
+		}
+	}
+
+	// Towards his chest, but no further than MaxTurnAngle from the placed facing
+	const FVector RestForward = RestRotation.GetForwardVector();
+	FVector Desired = (Bat->GetActorLocation() + FVector(0.0f, 0.0f, 40.0f) - GetActorLocation()).GetSafeNormal();
+	if (Desired.IsNearlyZero())
+	{
+		return;
+	}
+	const float Angle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(RestForward, Desired), -1.0f, 1.0f)));
+	if (Angle > MaxTurnAngle)
+	{
+		const FQuat Full = FQuat::FindBetweenNormals(RestForward, Desired);
+		Desired = FQuat::Slerp(FQuat::Identity, Full, MaxTurnAngle / Angle).RotateVector(RestForward);
+	}
+
+	const FRotator Target = FRotationMatrix::MakeFromX(Desired).Rotator();
+	SetActorRotation(FMath::RInterpTo(GetActorRotation(), Target, DeltaSeconds, TurnSpeed));
+}
+
+bool AEchoAnchorTarget::HasAnchorOnFace() const
+{
+	const FVector Face = GetFaceCenter();
+	for (const AEchoAnchorPoint* Anchor : TActorRange<AEchoAnchorPoint>(GetWorld()))
+	{
+		if (FVector::DistSquared(Anchor->GetActorLocation(), Face) < FMath::Square(Diameter))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 FVector AEchoAnchorTarget::GetFaceCenter() const
