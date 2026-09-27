@@ -103,9 +103,7 @@ def host():
     ok = yield from wait_for(lambda: net_mode() == "server" and map_name() == "TitleScreen", 20.0)
     check(ok, f"hosting: the lobby is open on a listen server ({net_mode()})")
     ok = yield from wait_for(lambda: len(players()) == 2, 60.0)
-    check(local_realm() == unreal.EchoRealm.LIVING, f"the host plays Bat ({local_realm()})")
-    ok = yield from wait_for(lambda: shown_era() == "present", 20.0)
-    check(ok, f"the host's game loaded only the present ({shown_era()})")
+    check(ok, f"the guest joined the lobby ({len(players())} players)")
     if not ok:
         return
     ok = yield from wait_for(lambda: top_is("EchoLobbyScreen"), 10.0)
@@ -117,6 +115,8 @@ def host():
     ok = yield from wait_for(lambda: map_name() == "Lvl_SpiritPath" and len(players()) == 2 and local_realm() is not None, 60.0)
     check(ok, f"Start takes the host into the game with the guest ({map_name()}, {len(players())} players)")
     check(local_realm() == unreal.EchoRealm.LIVING, f"the host plays Bat ({local_realm()})")
+    ok = yield from wait_for(lambda: shown_era() == "present", 20.0)
+    check(ok, f"the host's game loaded only the present ({shown_era()})")
     yield 8.0  # let the guest finish its checks before the host closes the game
 
 
