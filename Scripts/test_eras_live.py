@@ -15,6 +15,7 @@ import unreal
 
 gs = unreal.GameplayStatics
 MODE = globals().get("ECHO_ERAS_MODE", "normal")
+TRACE_CLIMB = globals().get("ECHO_ERAS_TRACE", False)
 T = {"failures": 0, "checks": 0, "wait": 0.0, "elapsed": 0.0, "handle": None, "gen": None}
 PRESENT, PAST = unreal.EchoEra.PRESENT, unreal.EchoEra.PAST
 SOURCE_TAGS = ("CanyonBuilder", "ClimbBuilder", "CrossingBuilder", "EchoBuilder")
@@ -223,6 +224,102 @@ def scenario():
     yield 1.0
     check(era_state(client) == guest_era and director(client).is_ready(), f"after respawning the guest still sees the {guest_era}")
     guest_char.set_actor_location(start, False, True)
+
+    # Stretch goal: Saraa plants a sapling in the past; a climbable tree stands there in Bat's present
+    spots = gs.get_all_actors_of_class(server, unreal.EchoSaplingSpot)
+    if not check(len(spots) == 1, "there's a sapling spot"):
+        return
+    spot_s = spots[0]
+    spot_c = gs.get_all_actors_of_class(client, unreal.EchoSaplingSpot)[0]
+    spot_present = spot_s if host_era == "present" else spot_c
+    spot_past = spot_c if host_era == "present" else spot_s
+    yield 0.5
+    check(not spot_s.is_planted() and not spot_s.is_tree_solid() and not spot_c.is_tree_solid(), "before planting: no tree, and nothing to bump into")
+    check(not spot_present.is_tree_visible() and not spot_past.is_sapling_visible(), "... and nothing drawn in either era but the mark")
+    saraa = character(server, unreal.EchoRealm.SPIRIT)
+    bat = character(server, unreal.EchoRealm.LIVING)
+    saraa_start, bat_start = saraa.get_actor_location(), bat.get_actor_location()
+    here = spot_s.get_actor_location()
+    # Bat walking onto the mark doesn't plant anything
+    bat.set_actor_location(unreal.Vector(here.x, here.y, here.z + 100), False, True)
+    yield 1.0
+    check(not spot_s.is_planted(), "Bat stepping on the mark doesn't plant it")
+    bat.set_actor_location(bat_start, False, True)
+    saraa.set_actor_location(unreal.Vector(here.x, here.y, here.z + 100), False, True)
+    ok = yield from wait_for(lambda: spot_s.is_planted() and spot_c.is_planted(), 5.0)
+    check(ok, "Saraa steps on the mark: the sapling is planted, on both machines")
+    yield 0.5
+    check(spot_s.is_tree_solid() and spot_c.is_tree_solid(), "the tree is solid on both machines (it's in the shared layer)")
+    check(spot_past.is_sapling_visible() and not spot_past.is_tree_visible(), "the past shows the sapling")
+    check(spot_present.is_tree_visible() and not spot_present.is_sapling_visible(), "the present shows the grown tree")
+    # Bat can stand on its top branch (level with the ledge); Saraa falls through it
+    top = spot_s.get_top_step_location()
+    bat.set_actor_location(unreal.Vector(top.x, top.y, top.z + 250), False, True)
+    bat.set_actor_location(unreal.Vector(top.x, top.y, top.z - 400), True, False)
+    bat_feet = bat.get_actor_location().z - 96
+    check(abs(bat_feet - top.z) < 15, f"Bat can stand on the tree's top branch (feet {bat_feet:.0f}, branch {top.z:.0f})")
+    saraa.set_actor_location(unreal.Vector(top.x, top.y, top.z + 250), False, True)
+    saraa.set_actor_location(unreal.Vector(top.x, top.y, top.z - 400), True, False)
+    check(saraa.get_actor_location().z - 96 < top.z - 100, "Saraa passes through it (it isn't in her era)")
+    saraa.set_actor_location(saraa_start, False, True)
+
+    # Bat climbs it with real jumps (his own machine's input), branch to branch, from the ground to the ledge
+    if MODE != "host_saraa":
+        n = spot_s.get_num_steps()
+        climbed = 0
+        for i in range(-1, n - 1):
+            here_top = spot_s.get_actor_location() if i < 0 else spot_s.get_step_location(i)
+            nxt = spot_s.get_step_location(i + 1)
+            # Stand at the near edge of this branch (or on the ground by the trunk), facing the next one
+            if i >= 0:
+                dx, dy = nxt.x - here_top.x, nxt.y - here_top.y
+                d = math.hypot(dx, dy) or 1.0
+                ux, uy = dx / d, dy / d
+                start_xy = (here_top.x - ux * 60, here_top.y - uy * 60)
+            else:
+                # From the ground beside the first branch (it points at the ledge, so not from beyond its tip)
+                ox, oy = nxt.x - here_top.x, nxt.y - here_top.y
+                d = math.hypot(ox, oy) or 1.0
+                px, py = -oy / d, ox / d
+                start_xy = (nxt.x + px * 170, nxt.y + py * 170)
+                ux, uy = -px, -py
+            bat.set_actor_location(unreal.Vector(start_xy[0], start_xy[1], here_top.z + 110), False, True)
+            bat.set_actor_location(unreal.Vector(start_xy[0], start_xy[1], here_top.z - 200), True, False)
+            yield 0.3
+            bat.jump()
+            for f in range(40):
+                # Steer at the branch's middle and let go once over it, like a player landing a jump
+                l = bat.get_actor_location()
+                tx, ty = nxt.x - l.x, nxt.y - l.y
+                if math.hypot(tx, ty) > 30:
+                    bat.add_movement_input(unreal.Vector(tx, ty, 0).normal(), 1.0, False)
+                if TRACE_CLIMB and f % 5 == 0:
+                    l = bat.get_actor_location()
+                    log(f"   trace {i}: frame {f} at ({l.x:.0f}, {l.y:.0f}, feet {l.z - 96:.0f})")
+                yield 0.0
+            # Judge the jump once he's standing on something again
+            yield from wait_for(lambda: bat.get_movement_component().is_moving_on_ground(), 3.0)
+            yield 0.2
+            feet = bat.get_actor_location().z - 96
+            on = abs(feet - nxt.z) < 20 and math.hypot(bat.get_actor_location().x - nxt.x, bat.get_actor_location().y - nxt.y) < 160
+            if not on:
+                log(f"   climb: from {'the ground' if i < 0 else f'branch {i + 1}'} to branch {i + 2} missed (feet {feet:.0f}, branch {nxt.z:.0f})")
+                break
+            climbed += 1
+        check(climbed == n, f"Bat climbs the tree with real jumps, branch by branch, up to ledge height ({climbed}/{n} jumps)")
+        if climbed == n:
+            # ...and walks off the top branch onto the overlook ledge it points at
+            base, top = spot_s.get_actor_location(), spot_s.get_top_step_location()
+            ox, oy = top.x - base.x, top.y - base.y
+            d = math.hypot(ox, oy) or 1.0
+            for _ in range(60):
+                bat.add_movement_input(unreal.Vector(ox / d, oy / d, 0), 1.0, False)
+                yield 0.0
+            yield from wait_for(lambda: bat.get_movement_component().is_moving_on_ground(), 3.0)
+            l = bat.get_actor_location()
+            out = math.hypot(l.x - base.x, l.y - base.y)
+            check(abs(l.z - 96 - top.z) < 20 and out > 300, f"... and steps off the top branch onto the ledge ({out:.0f} cm from the trunk, feet {l.z - 96:.0f})")
+    bat.set_actor_location(bat_start, False, True)
 
 
 def on_tick(delta):

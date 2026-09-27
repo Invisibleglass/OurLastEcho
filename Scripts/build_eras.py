@@ -128,6 +128,7 @@ def build_materials():
     material_instance("MI_GhostFromPresent", ghost, vectors={"GhostColor": (1.0, 0.55, 0.2, 0.35)})
     material_instance("MI_ArrowPast", glow, vectors={"Color": (0.3, 0.7, 1.0, 1.0)}, scalars={"Glow": 5.0})
     material_instance("MI_ArrowTrailPast", outline, vectors={"Color": (0.35, 0.7, 1.0, 1.0)}, scalars={"Glow": 5.0, "Flicker": 0.0, "Opacity": 0.7})
+    material_instance("MI_SaplingMarker", glow, vectors={"Color": (0.55, 0.9, 0.25, 1.0)}, scalars={"Glow": 1.2})
     material_instance("MI_WhipLinePresent", outline, vectors={"Color": (0.7, 0.75, 0.8, 1.0)}, scalars={"Glow": 0.25, "Flicker": 0.0, "Opacity": 0.35})
     log("materials built")
     return canyon, props
@@ -540,6 +541,23 @@ def build_era(era, shapes, canyon_mats, prop_mats):
     log(f"built {ERA_MAPS[era]}: {len(actors)} actors")
 
 
+def place_sapling_spot():
+    """Stretch goal: where Saraa plants a sapling in the past, a climbable tree stands in Bat's present. It's in front
+    of the overlook ledge (build_canyon's LEDGE_*), its top branch level with the ledge and pointing at it"""
+    s = (G["LEDGE_X"][0] + G["LEDGE_X"][1]) / 2
+    ledge_front = G["half_width"](1, s) - G["LEDGE_REACH"]
+    lateral = ledge_front - 250.0
+    x, y, _ = floor_point(s, lateral)
+    hit = unreal.SystemLibrary.line_trace_single(editor_world(), unreal.Vector(x, y, 3000), unreal.Vector(x, y, -3000),
+                                                 unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [], unreal.DrawDebugTrace.NONE, True)
+    z = hit.to_tuple()[4].z if hit and hit.to_tuple()[0] else G["ground_height"](x, y)
+    out_x, out_y = G["outward"](1, s)
+    spot = spawn(unreal.EchoSaplingSpot, (x, y, z), (0.0, 0.0, 0.0), "SaplingSpot", "Eras")
+    spot.set_editor_property("top_step_height", G["LEDGE_TOP"] - z)
+    spot.set_editor_property("top_step_yaw", math.degrees(math.atan2(out_y, out_x)))
+    log(f"sapling spot at ({x:.0f}, {y:.0f}, {z:.0f}), 250 cm in front of the ledge (top {G['LEDGE_TOP']})")
+
+
 def main():
     world = editor_world()
     if not world.get_path_name().startswith(SHARED_MAP + "."):
@@ -561,6 +579,7 @@ def main():
         if actor.actor_has_tag(TAG):
             eas.destroy_actor(actor)
     director = spawn(unreal.EchoEraDirector, (0, 0, 200), label="EraDirector", folder="Eras")
+    place_sapling_spot()
     les.save_current_level()
     unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)
     log(f"placed {director.get_actor_label()}; done")
