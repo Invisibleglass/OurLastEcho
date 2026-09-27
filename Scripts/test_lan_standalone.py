@@ -72,6 +72,17 @@ def local_realm():
     return pawn.get_realm() if pawn and hasattr(pawn, "get_realm") else None
 
 
+def shown_era():
+    """present / past / both / none: which era levels this game process has loaded (Milestone 6)"""
+    w = world()
+    found = gs.get_all_actors_of_class(w, unreal.EchoEraDirector) if w else []
+    if not found or not found[0].is_ready():
+        return "none"
+    d = found[0]
+    present, past = d.is_era_loaded(unreal.EchoEra.PRESENT), d.is_era_loaded(unreal.EchoEra.PAST)
+    return "both" if present and past else "present" if present else "past" if past else "none"
+
+
 def wait_for(cond, timeout):
     t = 0.0
     while t < timeout:
@@ -92,7 +103,9 @@ def host():
     ok = yield from wait_for(lambda: net_mode() == "server" and map_name() == "TitleScreen", 20.0)
     check(ok, f"hosting: the lobby is open on a listen server ({net_mode()})")
     ok = yield from wait_for(lambda: len(players()) == 2, 60.0)
-    check(ok, f"the guest joined the lobby ({len(players())} players)")
+    check(local_realm() == unreal.EchoRealm.LIVING, f"the host plays Bat ({local_realm()})")
+    ok = yield from wait_for(lambda: shown_era() == "present", 20.0)
+    check(ok, f"the host's game loaded only the present ({shown_era()})")
     if not ok:
         return
     ok = yield from wait_for(lambda: top_is("EchoLobbyScreen"), 10.0)
@@ -127,6 +140,8 @@ def guest():
     ok = yield from wait_for(lambda: map_name() == "Lvl_SpiritPath" and local_realm() is not None, 60.0)
     check(ok, f"the host's Start brings the guest into the game ({map_name()})")
     check(local_realm() == unreal.EchoRealm.SPIRIT, f"the guest plays Saraa ({local_realm()})")
+    ok = yield from wait_for(lambda: shown_era() == "past", 20.0)
+    check(ok, f"the guest's game loaded only the past ({shown_era()})")
     yield 12.0  # stay in the game while the host checks (the guest quitting sends the host back to the title)
 
 

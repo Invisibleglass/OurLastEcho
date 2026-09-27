@@ -189,6 +189,20 @@ def scenario():
         check("MI_ArrowPast" in arrow_mats(past_world), f"in the past it's a spirit arrow {sorted(arrow_mats(past_world))}")
         check("MI_Arrow" in arrow_mats(present_world), f"in the present it's his own arrow {sorted(arrow_mats(present_world))}")
 
+    # Saraa's whip line, seen from the host's era (a lash on the server shows it on the host's machine)
+    saraa_server = character(server, unreal.EchoRealm.SPIRIT)
+    whip = saraa_server.get_editor_property("sword_whip")
+    lashed = whip.lash_in_direction(saraa_server.get_actor_forward_vector())
+    line_mat = None
+    for _ in range(20):
+        yield 0.0
+        line = next((c for c in saraa_server.get_components_by_class(unreal.StaticMeshComponent) if c.get_name() == "WhipLine"), None)
+        if line and line.is_visible():
+            line_mat = line.get_material(0).get_name()
+            break
+    want = "MI_WhipLinePresent" if host_era == "present" else "MI_WhipLine"
+    check(lashed and line_mat == want, f"Saraa's whip line in the host's {host_era} is drawn as {want} ({line_mat})")
+
     # Debug: swap the local view (the real console command, on the guest's machine), and back
     guest_pc = gs.get_player_controller(client, 0)
     other = "past" if guest_era == "present" else "present"

@@ -18,7 +18,7 @@ while ((Get-Date) -lt $deadline) {
     $new = Get-Content $Log | Select-Object -Skip $startLines
     $hits = $new | Where-Object { $_ -match $Marker -or $_ -match "LogPython: Error" }
     if (-not $DonePattern -and $hits) { break }
-    if ($DonePattern -and ($hits | Where-Object { $_ -match "$Marker.*$DonePattern" -or $_ -match "LogPython: Error" })) { Start-Sleep -Milliseconds 500; break }
+    if ($DonePattern -and ($hits | Where-Object { $_ -cmatch "$Marker.*$DonePattern" -or $_ -match "LogPython: Error" })) { Start-Sleep -Milliseconds 500; break }
 }
 $new = Get-Content $Log | Select-Object -Skip $startLines
 $new | Where-Object { $_ -match $Marker -or $_ -match "LogPython: Error" } | ForEach-Object { $_ -replace '^\[.*?\]\[.*?\]LogPython: ', '' }
