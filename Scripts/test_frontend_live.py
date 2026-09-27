@@ -457,8 +457,19 @@ def online_scenario():
     yield 2.0
     host_realm, guest_realm = pawn(0).get_realm(), pawn(1).get_realm()
     check(host_realm == unreal.EchoRealm.LIVING and guest_realm == unreal.EchoRealm.SPIRIT, f"the host plays Bat, the second player Saraa ({host_realm}, {guest_realm})")
+
+    # Each machine loads its own era of the canyon (Milestone 6)
+    def era_of(index):
+        d = gs.get_all_actors_of_class(world(index), unreal.EchoEraDirector)
+        if not d or not d[0].is_ready():
+            return "loading"
+        d = d[0]
+        return "present" if d.is_era_visible(unreal.EchoEra.PRESENT) and not d.is_era_loaded(unreal.EchoEra.PAST) else \
+            "past" if d.is_era_visible(unreal.EchoEra.PAST) and not d.is_era_loaded(unreal.EchoEra.PRESENT) else "mixed"
+    ok = yield from wait_for(lambda: era_of(0) == "present" and era_of(1) == "past", 15.0)
+    check(ok, f"after joining from the lobby, the host sees the present and the guest the past ({era_of(0)}, {era_of(1)})")
+
     # In-game menu: shows over the game and pauses it for both players
-    # In-game menu: shows over the game, which keeps running
     guest = pc(1)
     ui.queue_console_command(guest, "EchoMenu")  # opening it tells the server: must not run inside Python
     ok = yield from wait_for(lambda: top_is(1, "EchoPauseMenuScreen"), 2.0)
@@ -491,6 +502,8 @@ def online_scenario():
     yield from click(1, "Leave")
     ok = yield from wait_for(lambda: map_name(0) == "TitleScreen" and map_name(1) == "TitleScreen" and top(0) is not None, 30.0)
     check(ok, f"Leave Game returns both players to the title screen ({map_name(0)}, {map_name(1)})")
+    leftovers = [len(gs.get_all_actors_of_class(world(i), unreal.EchoInstancedProps)) + len(gs.get_all_actors_of_class(world(i), unreal.EchoEraDirector)) for i in (0, 1)]
+    check(ok and leftovers == [0, 0], f"... and nothing of either era is left loaded ({leftovers})")
     ok = yield from wait_for(lambda: top_is(0, "EchoDialog") and "Saraa left" in top(0).get_message_text(), 5.0)
     check(ok, f"the host is told why ({top(0).get_message_text() if top_is(0, 'EchoDialog') else top(0).get_class().get_name() if top(0) else None})")
     if top_is(0, "EchoDialog"):
