@@ -1,3 +1,129 @@
+# Milestone 6 – Two eras: one skeleton, two skins
+
+Branch: `milestone-6-two-eras`, branched from `main` (Milestone 5 was merged). Nothing was pushed. Built with the editor open, driven through its MCP server.
+
+**In short:** Bat now sees a dry, eroded present-day canyon and Saraa a lush, ancient one. Each game loads only its own era's visuals, on its own machine. Everything anyone can stand on or bump into is shared, so gameplay and online movement are exactly as before.
+
+## How the level is split
+
+| Layer | Level | Loaded on | What's in it |
+|---|---|---|---|
+| **Shared** | `Lvl_SpiritPath` | every machine | All gameplay actors, spawns, triggers and **all collision**. The 540 canyon rock/floor meshes and PCG rocks are still here and still solid, but **hidden in game**. The canyon floor landscape stays here too, visible. |
+| **Present** (Bat) | `Lvl_SpiritPath_Present` | Bat's machine only | Visible copies of all 540 shapes (same transforms, present materials), low sunset sun, dusty fog, desaturated ochre grading, dry cracked riverbed, dead trees and stumps, a fallen cairn and broken walls, a wind ambience hook. **No collision at all.** |
+| **Past** (Saraa) | `Lvl_SpiritPath_Past` | Saraa's machine only | The same 540 shapes in past materials, bright mid-morning sun, clear blue sky, light mist, saturated green/blue grading, a shallow river along the riverbed's line, 3,200 grass tufts, living trees where the dead ones stand, an intact ovoo cairn (stones, pole, blue khadag scarves) where the ruins are, intact stone walls, and water, birds and distant drums hooks. **No collision at all.** |
+
+- **Why the landscape floor stays shared:** a landscape can't be copied without its collision, and it's walkable, so it belongs in the shared layer anyway. Its colour comes from `MPC_Era`, a material parameter each machine sets locally (0 = present, 1 = past). So it's ochre for Bat and green for Saraa. The same tint reaches the few other visible shared rock surfaces (the anchor targets' rock mounts).
+- **The shapes line up exactly:** the era levels are built by copying every shared shape's transform, and the eras test compares all 540 on each machine.
+
+## How each machine loads its era
+
+**Choice:** `Lvl_SpiritPath` doesn't use World Partition, so each era is an ordinary level loaded as a **level instance** with `ULevelStreamingDynamic::LoadLevelInstance`, on that machine only.
+- Ordinary streaming sublevels were the other option. But when the server streams a sublevel in, Unreal tells every client to load it too, which is exactly what must not happen here.
+- A level instance is purely local. The server never hears about it, and the other player's machine never loads it. (I checked the engine code: the client does tell the server its level is visible, and the server only checks the name is well formed.)
+
+`AEchoEraDirector`, placed once in the shared level and never replicated, runs on every machine:
+- **Role to era:** it waits for the local player's character (Bat means present, Saraa means past; this also works with Saraa as host), then loads that era.
+- **The fade:** the screen stays black from the first frame until the era is loaded and visible, then fades in over 0.6 s. Nobody sees the bare shared layer.
+- **Collision safety net:** as an era level loads, it switches collision off on everything in it, even Unreal's editor builder brush. An era layer can't block one player alone, even if someone later drops a solid prop into one.
+- **Respawning:** the character's role doesn't change, so the era stays loaded.
+- **Joining from the lobby / returning to the title:** the era loads after travel and goes away with the world when leaving (both checked in the online test).
+- **During a pause:** it keeps working while the game is paused.
+
+## Other things that changed with the eras
+
+- **Each player sees the other as a ghost:** Saraa already was one on both screens. Now, on Saraa's machine, Bat shows as a warm amber ghost from the present (`MI_GhostFromPresent`).
+- **Bat's arrows:** his normal golden arrow in the present, a spirit-blue arrow and trail in the past (`MI_ArrowPast`, `MI_ArrowTrailPast`).
+- **Saraa's whip line:** her bright spirit line in the past, a faint pale echo in the present (`MI_WhipLinePresent`).
+- **Spirit and echo platforms:** they keep their own per-player rules, unchanged.
+
+## Debug console commands
+
+(Type them in the game window's console. Each affects only the machine you type it on.)
+- `EchoSwapEra`: preview the other era on this machine. Type it again to swap back.
+- `EchoEra present` / `EchoEra past` / `EchoEra auto`: pick an era, or go back to your own.
+- `EchoShowBothEras`: load both eras at once, to check that they line up. Type it again to turn it off. With both loaded, two suns, two fogs and two gradings overlap, so colours look washed out and Unreal warns about two directional lights. It's a debug view.
+
+## Stretch goal: the sapling (done)
+
+- **In the past:** a mark glows on the ground in front of the overlook ledge. When Saraa steps on it she plants a sapling.
+- **In the present,** a great tree stands on that spot: 10 branch steps (90 cm apart) spiral up to the ledge's height, with the top one pointing at the ledge. It gives Bat a second way up to the overlook.
+- **Networking:** the tree's collision is in the shared layer, turned on for everyone at once through a replicated flag. It blocks only Bat; Saraa walks through it.
+- **Tested with real jumps:** Bat climbs all 10 branches and steps onto the ledge.
+- *Simplest option:* planting happens by stepping on the mark, with no extra button.
+
+## Build order
+
+`build_canyon.py` → `build_climb.py` → `build_crossing.py` → `build_canyon_rocks.py` → **`build_eras.py` last**:
+- **Why last:** the earlier builders respawn visible shared geometry, and `build_canyon.py` respawns a shared post-process volume. `build_eras.py` then copies the shapes into the eras, hides them, and moves the lighting out.
+- **Rebuilds:** it rebuilds both era levels from scratch and is safe to re-run. **Re-run it after changing the canyon or any rock piece**, or the eras will draw the old shapes (the eras test catches this).
+
+## How to test
+
+**Just play (editor):** Play as usual (2 players, Listen Server).
+- **Bat's window** shows the dusty present, **Saraa's window** the green past.
+- **The sapling:** walk Saraa onto the glowing mark in front of the overlook ledge, near the end of the Spirit Path. A tree appears in Bat's window; climb it.
+- **Previewing without a second player:** type `EchoSwapEra` in the console.
+
+**Automated (editor open):**
+- `Scripts/tools/run_gameplay_test.ps1 -Script test_eras_live.py -Marker ECHO_ERAS_TEST`: 38 checks, about 20 s.
+- **With Saraa as host:** type `Echo.HostPlaysSaraa 1` before starting PIE, then run it with `py ECHO_ERAS_MODE="host_saraa"` first (35 checks: the climb needs Bat on the host). Set the variable back to 0 afterwards.
+- `Scripts/measure_eras.py`: frame rate with each era, and with both.
+
+**Editor closed:** `powershell -File Scripts/run_lan_test.ps1` runs two real game processes; each must load only its own era.
+
+## Results
+
+**All suites pass:**
+
+| Suite | Checks |
+|---|---|
+| Eras (Bat hosting) | 38/38 |
+| Eras (Saraa hosting) | 35/35 |
+| Online front end (with era checks) | 36/36 |
+| Two real game processes over LAN | host PASS, guest PASS |
+| The Crossing with network emulation | 67/67 at 108 ms ping, 30 ms jitter, 5% loss; 0 corrections |
+| The Crossing, Saraa hosting, network emulation | 38/38 at 141 ms ping; 0 corrections |
+| Milestone 1 | 29/29 |
+| Milestone 2 | 34/34 |
+| Milestone 3 | 60/60 |
+| The Crossing | 67/67 |
+| Title / settings | 52/52 |
+| Headless end-to-end | PASS |
+
+**Performance** (2-player PIE, editor in the background with throttling off):
+
+| View | Frame rate |
+|---|---|
+| Normal (each machine shows its own era) | 46 fps |
+| Both views on the present | 45.8 fps |
+| Both views on the past | 46.0 fps |
+| One machine loading both eras | 44.6 fps (about 0.7 ms per frame for an extra era) |
+
+- **Memory:** an extra era layer added only about 3–10 MB, because the eras are instanced basic shapes.
+- **What that means:** the eras cost about the same, and only one is ever loaded per machine. Real art will change these numbers; measure again once it arrives.
+
+Details are in TEST_REPORT.md.
+
+## Known issues
+
+- **Needs a manual check: the look and the fade.** Colours and props are greybox placeholders. The fade-in is tested only as "ready"; watch it once when joining.
+- **Silent ambience:** the ambience hooks (wind; water, birds, drums) have no sounds yet.
+- **River pieces show faint seams** where the flat boxes overlap (greybox).
+- **`EchoShowBothEras` washes the colours out**, because both eras' lights and gradings overlap (see *Debug console commands*).
+- **The landscape floor isn't duplicated per era**, only tinted (see *How the level is split*). If the eras ever need differently *shaped* ground, that ground has to be shared collision plus per-era visuals, like the rock is now.
+- **A Lumen warning** ("surface cache atlas oversubscribed") appeared in 2-player PIE, mostly with both eras loaded. The editor halves Lumen's surface cache for 2-player PIE on this 6 GB GPU (see CLAUDE.md). Not checked in a single full-quality game window.
+- **Rebuild order:** `build_eras.py` must run after any canyon or rock builder (see *Build order*).
+
+## Suggestions for Milestone 7
+
+- **Era art:** replace the greybox shapes in each era level with real meshes and materials (eroded vs intact strata, a real river with a flow material, foliage). The structure is ready: art goes in the era levels, collision stays shared.
+- **Era-specific geometry:** decide how to handle places where the eras should differ in shape (a collapsed arch in the present). The shared-collision rule means a player-specific obstacle must be a realm-filtered collider, like the spirit platforms.
+- **More cross-time interactions**, built like the sapling: Saraa moves a stone and a path opens in the present, or Bat clears rubble and reveals a carving Saraa made.
+- **Sound:** fill the ambience hooks and add era-specific footsteps.
+- **Transitions:** a proper "echo" effect instead of a plain fade when the era loads or swaps.
+
+---
+
 # Milestone 5 – Title screen, menus, hosting and settings
 
 Branch: `milestone-5-title-screen`, branched from `milestone-4-sword-whip` (Milestone 4 isn't merged into `main` yet, as asked). Nothing was pushed. Built with the editor open, driven through its MCP server.

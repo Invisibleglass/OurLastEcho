@@ -59,6 +59,20 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 - **Sessions:** `UEchoSessionSubsystem` (game-instance subsystem) is the only thing the menus call; it uses `Online::GetSessionInterface(World)` (per PIE instance), OSS **Null** today (switch platform service for EOS). Join = `GetResolvedConnectString` + `ClientTravel`, with a 15 s connect timeout. `UEchoGameInstance` turns network/travel failures into the message shown on the title (`ReturnToTitle`, pending message) and has exec commands `EchoHost`, `EchoFindGames`, `EchoJoinGame N`, `EchoReady 0/1`, `EchoStartGame`, `EchoLeave`.
 - **Settings:** `UEchoGameUserSettings` (`GameUserSettingsClassName`; per machine, `GameUserSettings.ini`). Audio = sound classes `SC_Master` → `SC_Music`/`SC_SFX`/`SC_Dialogue`/`SC_Voice` with mix `SMix_Settings` (DefaultSoundClass = SC_SFX, VoiP = SC_Voice). Brightness = `GEngine->DisplayGamma`. **Defaults are written out in `SetToDefaults`**: a config class's CDO holds the saved values. Keys: Enhanced Input user settings (`bEnableUserSettings`), mappable names on the IAs and on IMC_Default's WASD. In the editor, Apply skips resolution/window mode.
 - **Title scene actors:** `AEchoTitleCamera` (drift only in a game world; it ticks in the editor too) and `AEchoTitleBat` (poseable-mesh seated pose `SeatedPose`, `LoopAnimation` hook). Pose rotators: negative roll swings a leg forward.
+## Two eras (Milestone 6)
+
+- **Shared layer vs era layers:** `Lvl_SpiritPath` is the **shared** layer (every machine): all gameplay and **all collision**. Its canyon rock/floor meshes and PCG rocks are hidden in game (still solid).
+  - Each era's visuals live in `Lvl_SpiritPath_Present` (Bat) / `Lvl_SpiritPath_Past` (Saraa): instanced copies of those shapes (`AEchoInstancedProps`, never collide), plus lighting, sky, fog, grading, props and ambience.
+  - **Never put anything collidable in an era level.** A player-specific obstacle must be a realm-filtered collider in the shared layer (like the spirit platforms or `AEchoSaplingSpot`'s tree).
+- **Loading:** `AEchoEraDirector` (`Echo/Eras/`, placed once in the shared level, not replicated) loads the local player's era with `ULevelStreamingDynamic::LoadLevelInstance`.
+  - That's local only; normal streaming sublevels would be pushed to clients by the server.
+  - It holds the screen black until the era is visible, then fades in. It strips collision from the loaded era level, and sets `MPC_Era`'s `Past` scalar locally.
+  - Era mapping: `EchoEraForRealm` (Living → Present, Spirit → Past) in `EchoTypes.h`.
+- **Visual-only code picks its look from `EchoVisibility::GetLocalViewerEra`** (the director's shown era, including debug overrides). Used for Bat's ghost look in the past (`OtherEraGhostMaterial`), the past-era arrow (`PastArrowMaterial`) and the present-era whip line (`PresentWhipLineMaterial`).
+- **Tinting what stays visible in the shared layer:** `M_CanyonRock` (built in `build_canyon.py`) has `UseEraCollection` / `FixedEra` / `PresentTint` / `PastTint` / `PresentDesaturation`. Shared surfaces (the landscape, rock mounts) follow `MPC_Era`; the era copies use `MI_*_Present` / `MI_*_Past` with a fixed era.
+- **Debug console commands** (`AOurLastEchoPlayerController`): `EchoSwapEra`, `EchoEra present|past|auto`, `EchoShowBothEras`.
+- **Stretch:** `AEchoSaplingSpot` (shared, replicated `bPlanted`). Saraa stepping on the mark plants it; a tree with 10 branch steps (blocks only `ECC_Pawn`) stands in the present, drawn per era.
+
 ## Engine & toolchain
 
 - **Unreal Engine 5.8.3**, installed at `D:\UE_5.8`. It's a registered (non-launcher) build: the `.uproject`'s `EngineAssociation` is a GUID that maps to that path via `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`.
@@ -95,7 +109,12 @@ Project scripts:
 - `Scripts/build_spirit_bow.py` (Milestone 3 input assets and materials; can run headless) and `Scripts/build_climb.py` (The Climb; open editor).
 - `Scripts/build_sword_whip.py` (Milestone 4 input assets and materials; can run headless) and `Scripts/build_crossing.py` (The Crossing; open editor).
 - `Scripts/build_title_screen.py` (Milestone 5; open editor): audio classes and mix, CommonUI input data, mappable key names, leaves, and the TitleScreen map (rebuilt from scratch; it refuses to touch any other map, then reopens Lvl_SpiritPath). It skips filling `DT_UIActions` if rows exist (the JSON import pops a modal dialog that blocks Python) and reuses `NS_TitleLeaves` (recreating a Niagara system under the same name crashed `SetAsset`).
-- **Level build order:** `build_canyon.py` → `build_climb.py` → `build_crossing.py` (it moves the EndZone after The Climb did) → `build_canyon_rocks.py`.
+- **Level build order:** `build_canyon.py` → `build_climb.py` → `build_crossing.py` (it moves the EndZone after The Climb did) → `build_canyon_rocks.py` → **`build_eras.py`**.
+- `Scripts/build_eras.py` (Milestone 6; open editor) must run **last**, and again after any change to the canyon or its rock pieces.
+  - It builds the era materials (`/Game/Echo/Eras`) and rebuilds both era levels from scratch: copies of every shared shape, lighting, props, ambience.
+  - It then hides the shared shapes, removes the shared lighting, and places `EraDirector` + `SaplingSpot` (tag `ErasBuilder`).
+  - It creates missing era maps with `new_blank_map` + `save_map`: duplicating a map asset and opening the copy crashed the editor (a "world memory leak" fatal error).
+- **Milestone 6 tests:** `Scripts/test_eras_live.py` (38 checks; `ECHO_ERAS_MODE="host_saraa"` with `Echo.HostPlaysSaraa 1` gives 35) and `Scripts/measure_eras.py` (frame rate per era).
 - **Milestone 5 tests:**
   - `Scripts/tools/run_frontend_test.ps1 -Mode title|online` runs `test_frontend_live.py` (52 / 32 checks) in a fresh front-end PIE session.
   - `Scripts/tools/run_gameplay_test.ps1 -Script <test> -Marker <tag>` runs a Milestone 1–4 live test in a fresh gameplay session.
@@ -164,6 +183,13 @@ Learned in Milestone 5:
   - `SubsystemBlueprintLibrary` isn't available in `-game`.
   - Order PIE worlds by `get_path_name()` (`UEDPIE_<n>_`), not `get_name()` (the same after travel).
 - **`-nullrhi` games can't drive CommonUI** (screen transitions never finish). Run test games windowed, at `scalability 0`: two full-quality copies starve the 6 GB GPU.
+
+Learned in Milestone 6:
+- **`ue_py.ps1`'s done pattern is case-sensitive** (it used to match "passes" as PASS and end runs early). Keep final result lines exactly `PASS` / `FAIL (`.
+- **Don't edit scripts by line number after inserting lines above.** A sed on a stale line number overwrote a check in the LAN test. Use the Edit tool with the exact text.
+- **Every level has a builder brush with collision.** Anything that must be collision-free (era levels) needs it switched off; the director does this at load.
+- **A placed actor keeps its saved component arrays:** after changing how many subobjects a constructor makes (e.g. the sapling's branches), re-place the actor (re-run its builder).
+- **Python in PIE:** the material library is `unreal.MaterialLibrary`; read `AActor::bHidden` with `get_editor_property("hidden")`; `line_trace_single`'s `HitResult.to_tuple()` gives (blocking, initial overlap, time, distance, location, ...).
 ## C++ vs Blueprint split (important)
 
 `.uasset` (Blueprints, widgets, materials, etc.) and `.umap` (levels) are **binary**, so Claude can't read or edit them directly. Therefore:
@@ -176,7 +202,7 @@ Learned in Milestone 5:
 
 ## Content & config
 
-- Default **game** map: **`/Game/Echo/Maps/TitleScreen`** (Milestone 5). Default **editor** map: **`/Game/Echo/Maps/Lvl_SpiritPath`** (game mode `BP_EchoGameMode` via its World Settings override). The headless tests pass the map explicitly. The project-wide default game mode is still the template's `BP_ThirdPersonGameMode`.
+- Default **game** map: **`/Game/Echo/Maps/TitleScreen`** (Milestone 5). Era levels `Lvl_SpiritPath_Present` / `_Past` are loaded at runtime by the era director, never opened directly. Default **editor** map: **`/Game/Echo/Maps/Lvl_SpiritPath`** (game mode `BP_EchoGameMode` via its World Settings override). The headless tests pass the map explicitly. The project-wide default game mode is still the template's `BP_ThirdPersonGameMode`.
 - Game content lives under `/Game/Echo/` (Blueprints, Materials, Maps, PCG). Greybox geometry uses `/Engine/BasicShapes/Cube` + `/Game/LevelPrototyping/Materials/MI_PrototypeGrid_Gray`.
 - PIE defaults to **2 players, Play As Listen Server** (`Config/DefaultEditorPerProjectUserSettings.ini`, also set in the user's own `Saved/` copy).
 - Template levels: `ThirdPerson/Lvl_ThirdPerson` and the `Variant_*` levels. These use World Partition / One File Per Actor (`Content/__ExternalActors__`); `Lvl_SpiritPath` does not.

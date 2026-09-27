@@ -238,3 +238,60 @@ Changes requested after the user played the milestone, each followed by a full r
 | **The in-game menu pauses both players again** (the user's choice, overriding the brief). | Online test **34/34**: both worlds pause, the host knows who paused, Resume unpauses both, and leaving while paused still returns both to the title with a message. |
 
 After these: title 52/52, online 34/34, Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, The Crossing 67/67. Editor and Game builds: 0 warnings.
+
+## Milestone 6: baseline before starting, then results
+
+### Baseline (start of Milestone 6, before any changes)
+
+Run on branch `milestone-6-two-eras` straight after branching from `main` (Milestone 5 merged), each in a fresh PIE session:
+
+| Test | Result |
+|---|---|
+| `test_pie_live.py` (Milestone 1) | ✅ Pass, 29/29 |
+| `test_canyon_live.py` (Milestone 2) | ✅ Pass, 34/34 |
+| `test_climb_live.py` (Milestone 3) | ✅ Pass, 60/60 |
+| `test_crossing_live.py` (Milestone 4) | ✅ Pass, 67/67 |
+| `test_frontend_live.py` title (Milestone 5) | ✅ Pass, 52/52 |
+| `test_frontend_live.py` online (Milestone 5) | ✅ Pass, 34/34 |
+
+### Milestone 6 results (end of milestone)
+
+**How it was tested:** `Scripts/test_eras_live.py` runs in a 2-player listen-server PIE session. Each PIE world is one machine: the server world is the host's, the client world the guest's. It checks what each machine loaded and draws, the actual collision settings of every component, and the actual instance transforms.
+
+| Item | Result | Notes |
+|---|---|---|
+| Compiles, no warnings | ✅ Pass | Editor and Game targets: `Result: Succeeded`, 0 warnings. |
+| Bat sees only the present, Saraa only the past | ✅ Pass | The host's machine loads only `Lvl_SpiritPath_Present`, the client's only `Lvl_SpiritPath_Past`. With Saraa as host, the other way round. In two real game processes too (`run_lan_test.ps1`). |
+| No collision in either era layer | ✅ Pass | Every primitive component in each loaded era level has collision off (22 and 26 actors), also with both eras loaded at once. The director enforces it as an era loads. |
+| All collision shared; shapes line up | ✅ Pass | The shared layer's 540 canyon shapes still collide and are hidden in game. Each era draws all 540 at exactly the same transform (compared on both machines), and the two eras match each other shape for shape. |
+| The eras look different | ✅ Pass | Sun at -9° (present) vs -38° (past). The shared floor is tinted per machine (MPC 0 vs 1). Checked in screenshots: dusty ochre haze, dry cracked riverbed, dead trees and ruins vs blue sky, river, grass, trees and the intact cairn. |
+| Loading for host, client, respawn, lobby and title | ✅ Pass | Host and client (both role orders). The guest falls into the ravine, respawns, and keeps their era. After joining from the lobby, the host sees the present and the guest the past; after leaving for the title, nothing of either era is left (online test). |
+| Fade while loading | ✅ Pass (logic) / ⚠️ needs a look | The screen is held black until the era is visible, then fades in; the log shows "ready, fading in" on each machine. Not judged by eye. |
+| Movement smooth with network emulation | ✅ Pass | The Crossing's real predicted swings and walks at 108 ms ping, 30 ms jitter and 5% loss: 0 corrections (67/67). With Saraa as host at 141 ms: 0 corrections (38/38). |
+| Existing mechanics | ✅ Pass | Spirit and echo platforms keep their rules (Milestones 1 and 3 tests). Saraa is a ghost to Bat; Bat is a ghost from the present to Saraa. Bat's arrow is golden in the present and spirit-blue in the past. Saraa's whip line is the spirit line in the past and a faint echo in the present. |
+| Debug commands | ✅ Pass | `EchoSwapEra` (typed through the real console command) swaps only that machine and swaps back. `EchoShowBothEras` loads both and turns off again. |
+| Stretch: sapling → tree | ✅ Pass | Bat stepping on the mark does nothing; Saraa stepping on it plants it on both machines. The tree is solid on both, drawn only in the present; the sapling only in the past. Bat stands on the top branch; Saraa falls through. **Bat climbs all 10 branches with real jumps and steps onto the ledge.** |
+| Earlier suites | ✅ Pass | Milestone 1 29/29, Milestone 2 34/34, Milestone 3 60/60, The Crossing 67/67, title 52/52, online 36/36, headless end-to-end PASS, LAN two-process PASS/PASS. |
+
+**Performance** (`Scripts/measure_eras.py`, 2-player PIE in the background with throttling off, ~46 fps baseline):
+
+| Phase | Frame rate | Worst frame |
+|---|---|---|
+| Host present / guest past | 46.0 | 27 ms |
+| Both views present | 45.8 | 26 ms |
+| Both views past | 46.0 | 25 ms |
+| Guest loads both eras | 44.6 | 26 ms |
+
+Editor process memory rose only a few MB (4,419 → about 4,422–4,430 MB) when one machine loaded a second era. The greybox era layers are instanced basic shapes, so this measures the structure, not future art.
+
+### Bugs found while building (all fixed)
+
+1. **The editor crashed** creating an era map by duplicating a map asset: opening the copy leaks its world, which the editor treats as fatal. Era maps are now created as blank maps.
+2. **Every level's builder brush has collision**, including a fresh era level's. The director now switches off collision on everything an era level holds as it loads.
+3. **The sapling's first design wasn't climbable:** 7 branches, 128 cm apart, exactly Bat's jump height. It's now 10 branches, 90 cm apart, proven by the real-jump climb.
+4. **Test tooling:** `ue_py.ps1` matched `PASS` case-insensitively, so a check saying "passes" ended a run early and the next suite stopped PIE mid-test. It's case-sensitive now. My own edit to the LAN test briefly overwrote one of its checks; it was fixed and re-run.
+
+### Test conditions and tooling notes
+
+- **Era levels can't be inspected like the shared level in PIE:** tests reach them through `AEchoEraDirector.get_era_actors(era)`. Python names: the material library is `unreal.MaterialLibrary`; `AActor::IsHidden` is read as `get_editor_property("hidden")`.
+- **The sapling climb test steers at each branch and lets go over it**, like a player. Holding forward carried Bat straight over a 110 cm-wide branch.
