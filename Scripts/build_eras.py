@@ -203,7 +203,12 @@ def open_map(path):
 
 def clear_map():
     for actor in eas.get_all_level_actors():
-        if not isinstance(actor, (unreal.WorldSettings, unreal.Brush)):
+        if isinstance(actor, unreal.Brush):
+            # Every level has the editor's builder brush; an era layer mustn't collide, so not even that
+            brush = actor.get_component_by_class(unreal.BrushComponent)
+            if brush:
+                brush.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+        elif not isinstance(actor, unreal.WorldSettings):
             eas.destroy_actor(actor)
 
 

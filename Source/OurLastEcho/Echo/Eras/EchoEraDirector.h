@@ -105,6 +105,10 @@ protected:
 
 	void LoadEra(EEchoEra Era);
 	void UnloadEra(EEchoEra Era);
+
+	/** Switches collision off on everything in a freshly loaded era layer */
+	void StripCollision(EEchoEra Era);
+	bool bCollisionStripped[2] = { false, false };
 	void HoldBlack(APlayerController* PC);
 	void ApplyEraParameter(bool bWantPresent, bool bWantPast);
 

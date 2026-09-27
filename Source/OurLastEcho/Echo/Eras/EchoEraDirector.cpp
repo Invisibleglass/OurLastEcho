@@ -2,6 +2,7 @@
 
 #include "EchoEraDirector.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/Level.h"
 #include "Engine/LevelStreamingDynamic.h"
@@ -142,6 +143,10 @@ void AEchoEraDirector::Tick(float DeltaSeconds)
 		{
 			LoadEra(Era);
 			bAllVisible &= IsEraVisible(Era);
+			if (IsEraVisible(Era) && !bCollisionStripped[EraIndex(Era)])
+			{
+				StripCollision(Era);
+			}
 		}
 	}
 	if (!bAllVisible)
@@ -192,9 +197,31 @@ void AEchoEraDirector::LoadEra(EEchoEra Era)
 	bReady = false;
 }
 
+void AEchoEraDirector::StripCollision(EEchoEra Era)
+{
+	// An era layer exists on one machine only, so anything in it that collided would be felt by that player alone
+	// and fight the host's movement: whatever the level holds (even the editor's builder brush), no collision
+	int32 Stripped = 0;
+	for (AActor* Actor : GetEraActors(Era))
+	{
+		TInlineComponentArray<UPrimitiveComponent*> Primitives(Actor);
+		for (UPrimitiveComponent* Primitive : Primitives)
+		{
+			if (Primitive->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+			{
+				Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				++Stripped;
+			}
+		}
+	}
+	bCollisionStripped[EraIndex(Era)] = true;
+	UE_LOG(LogOurLastEcho, Log, TEXT("Eras: the %s layer is visual only (%d component(s) had collision switched off)"), EraName(Era), Stripped);
+}
+
 void AEchoEraDirector::UnloadEra(EEchoEra Era)
 {
 	TObjectPtr<ULevelStreamingDynamic>& Slot = Streaming[EraIndex(Era)];
+	bCollisionStripped[EraIndex(Era)] = false;
 	if (!Slot)
 	{
 		return;
