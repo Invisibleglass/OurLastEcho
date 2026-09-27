@@ -41,6 +41,7 @@ public class OurLastEcho : ModuleRules
 		PublicIncludePaths.AddRange(new string[] {
 			"OurLastEcho",
 			"OurLastEcho/Echo",
+			"OurLastEcho/Echo/Eras",
 			"OurLastEcho/Echo/FrontEnd",
 			"OurLastEcho/Echo/Settings",
 			"OurLastEcho/Echo/UI",

@@ -11,6 +11,7 @@
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
+#include "EchoEraDirector.h"
 #include "EchoGameMode.h"
 #include "EchoGameUserSettings.h"
 #include "EchoHUD.h"
@@ -203,6 +204,43 @@ void AOurLastEchoPlayerController::EchoSubtitle(const FString& Text)
 	if (AEchoHUD* EchoHUD = GetHUD<AEchoHUD>())
 	{
 		EchoHUD->ShowSubtitle(FText::FromString(Text), 5.0f);
+	}
+}
+
+void AOurLastEchoPlayerController::EchoSwapEra()
+{
+	if (AEchoEraDirector* Director = AEchoEraDirector::Get(this))
+	{
+		Director->SwapEra();
+	}
+}
+
+void AOurLastEchoPlayerController::EchoEra(const FString& Era)
+{
+	AEchoEraDirector* Director = AEchoEraDirector::Get(this);
+	if (!Director)
+	{
+		return;
+	}
+	if (Era.Equals(TEXT("present"), ESearchCase::IgnoreCase))
+	{
+		Director->SetDebugEra(true, EEchoEra::Present);
+	}
+	else if (Era.Equals(TEXT("past"), ESearchCase::IgnoreCase))
+	{
+		Director->SetDebugEra(true, EEchoEra::Past);
+	}
+	else
+	{
+		Director->SetDebugEra(false, EEchoEra::Present);
+	}
+}
+
+void AOurLastEchoPlayerController::EchoShowBothEras()
+{
+	if (AEchoEraDirector* Director = AEchoEraDirector::Get(this))
+	{
+		Director->SetShowBothEras(!Director->IsShowingBothEras());
 	}
 }
 

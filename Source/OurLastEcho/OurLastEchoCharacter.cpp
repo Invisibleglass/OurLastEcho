@@ -16,13 +16,18 @@
 #include "EchoSwordWhipComponent.h"
 #include "EchoGameUserSettings.h"
 #include "EchoCharacterMovementComponent.h"
+#include "EchoVisibility.h"
+#include "Materials/MaterialInterface.h"
+#include "TimerManager.h"
 
 AOurLastEchoCharacter::AOurLastEchoCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UEchoCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
-		
+
+	OtherEraGhostMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Eras/MI_GhostFromPresent.MI_GhostFromPresent")));
+
 	// Don't rotate when the controller rotates. Let that just affect the camera.
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -90,6 +95,36 @@ void AOurLastEchoCharacter::BeginPlay()
 		}
 		MeshComp->SetCastShadow(false);
 	}
+	else if (GetNetMode() != NM_DedicatedServer)
+	{
+		// Seen from the other era, this character is a ghost too (checked a few times a second: possession and
+		// the era can change)
+		OwnMaterials = GetMesh()->GetMaterials();
+		GetWorldTimerManager().SetTimer(EraLookTimer, this, &AOurLastEchoCharacter::UpdateEraLook, 0.25f, true, 0.0f);
+	}
+}
+
+void AOurLastEchoCharacter::UpdateEraLook()
+{
+	EEchoEra ViewerEra;
+	const bool bOtherEra = EchoVisibility::GetLocalViewerEra(GetWorld(), ViewerEra) && ViewerEra != EchoEraForRealm(Realm);
+	if (bOtherEra == bShowingOtherEraGhost)
+	{
+		return;
+	}
+	UMaterialInterface* Ghost = OtherEraGhostMaterial.LoadSynchronous();
+	if (bOtherEra && !Ghost)
+	{
+		return;
+	}
+	bShowingOtherEraGhost = bOtherEra;
+
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	for (int32 Index = 0; Index < MeshComp->GetNumMaterials(); ++Index)
+	{
+		MeshComp->SetMaterial(Index, bOtherEra ? Ghost : (OwnMaterials.IsValidIndex(Index) ? OwnMaterials[Index].Get() : nullptr));
+	}
+	MeshComp->SetCastShadow(!bOtherEra);
 }
 
 void AOurLastEchoCharacter::RespawnAtStart()

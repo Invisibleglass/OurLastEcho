@@ -70,8 +70,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Echo")
 	TObjectPtr<UMaterialInterface> GhostMaterial;
 
+	/**
+	 *  How this character looks to a player in the OTHER era, when it has no GhostMaterial of its own: Bat, seen from
+	 *  Saraa's past, is a ghost from the present. Applied locally on the viewing machine only
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Echo")
+	TSoftObjectPtr<UMaterialInterface> OtherEraGhostMaterial;
+
 	/** Where this character spawned; used by RespawnAtStart (server only) */
 	FTransform RespawnTransform;
+
+	/** Swaps to/from OtherEraGhostMaterial as this machine's era changes */
+	void UpdateEraLook();
+
+	TArray<TObjectPtr<UMaterialInterface>> OwnMaterials;
+	bool bShowingOtherEraGhost = false;
+	FTimerHandle EraLookTimer;
 
 public:
 

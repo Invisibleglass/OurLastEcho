@@ -82,6 +82,18 @@ public:
 	UFUNCTION(Exec)
 	void EchoSubtitle(const FString& Text);
 
+	/** Debug console command: preview the other era on this machine only (again = back) */
+	UFUNCTION(Exec)
+	void EchoSwapEra();
+
+	/** Debug console command: EchoEra present | past | auto (auto = this player's own era) */
+	UFUNCTION(Exec)
+	void EchoEra(const FString& Era);
+
+	/** Debug console command: load both eras at once, to check that they line up (again = off) */
+	UFUNCTION(Exec)
+	void EchoShowBothEras();
+
 protected:
 
 	/** Gameplay initialization */

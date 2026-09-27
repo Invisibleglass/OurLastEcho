@@ -16,6 +16,7 @@
 #include "EchoSpiritBowComponent.h"
 #include "OurLastEchoCharacter.h"
 #include "EchoTypes.h"
+#include "EchoVisibility.h"
 #include "OurLastEcho.h"
 
 namespace
@@ -89,6 +90,8 @@ AEchoArrow::AEchoArrow()
 
 	ArrowMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_Arrow.MI_Arrow")));
 	TrailMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_ArrowTrail.MI_ArrowTrail")));
+	PastArrowMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Eras/MI_ArrowPast.MI_ArrowPast")));
+	PastTrailMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Eras/MI_ArrowTrailPast.MI_ArrowTrailPast")));
 	ReleaseSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Engine/VREditor/Sounds/VR_click2_Cue.VR_click2_Cue")));
 	ImpactSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Engine/VREditor/Sounds/VR_click1_Cue.VR_click1_Cue")));
 }
@@ -99,10 +102,14 @@ void AEchoArrow::BeginPlay()
 
 	Movement->OnProjectileStop.AddDynamic(this, &AEchoArrow::OnArrowStop);
 
-	if (UMaterialInterface* Material = ArrowMaterial.LoadSynchronous())
+	// Each machine draws it in its own era's style
+	EEchoEra ViewerEra = EEchoEra::Present;
+	const bool bPastView = EchoVisibility::GetLocalViewerEra(GetWorld(), ViewerEra) && ViewerEra == EEchoEra::Past;
+	UMaterialInterface* ArrowLook = bPastView && !PastArrowMaterial.IsNull() ? PastArrowMaterial.LoadSynchronous() : ArrowMaterial.LoadSynchronous();
+	if (ArrowLook)
 	{
-		Shaft->SetMaterial(0, Material);
-		Tip->SetMaterial(0, Material);
+		Shaft->SetMaterial(0, ArrowLook);
+		Tip->SetMaterial(0, ArrowLook);
 	}
 
 	if (HasAuthority())
@@ -113,7 +120,7 @@ void AEchoArrow::BeginPlay()
 	if (GetNetMode() != NM_DedicatedServer)
 	{
 		UStaticMesh* CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-		UMaterialInterface* Material = TrailMaterial.LoadSynchronous();
+		UMaterialInterface* Material = bPastView && !PastTrailMaterial.IsNull() ? PastTrailMaterial.LoadSynchronous() : TrailMaterial.LoadSynchronous();
 		for (int32 Index = 0; Index < TrailLength; ++Index)
 		{
 			UStaticMeshComponent* Segment = NewObject<UStaticMeshComponent>(this);

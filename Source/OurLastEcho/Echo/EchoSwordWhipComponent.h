@@ -110,6 +110,10 @@ public:
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
 	TSoftObjectPtr<UMaterialInterface> WhipLineMaterial;
 
+	/** The whip line as seen from Bat's present: a faint echo of it (chosen locally per machine) */
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
+	TSoftObjectPtr<UMaterialInterface> PresentWhipLineMaterial;
+
 	/** Where the sword hangs relative to the character (capsule centre) when not swinging: at the left hip */
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
 	FTransform HolsterPlacement = FTransform(FRotator(-150.0f, 0.0f, 0.0f), FVector(8.0f, -26.0f, 0.0f));
@@ -267,6 +271,8 @@ protected:
 	float LastReleaseTime = -1000.0f;
 
 	bool bLineShown = false;
+	/** Which material the line currently has: the present-era echo (Bat's machine) or the spirit line */
+	bool bLineInPresentStyle = false;
 
 	/** Recent positions while swinging (debug arc) */
 	TArray<FVector> SwingTrail;

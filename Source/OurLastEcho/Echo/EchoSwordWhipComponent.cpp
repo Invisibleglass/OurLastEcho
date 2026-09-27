@@ -23,6 +23,7 @@
 #include "EchoCharacterMovementComponent.h"
 #include "EchoTrainingDummy.h"
 #include "EchoTypes.h"
+#include "EchoVisibility.h"
 #include "OurLastEcho.h"
 #include "OurLastEchoCharacter.h"
 
@@ -61,6 +62,7 @@ UEchoSwordWhipComponent::UEchoSwordWhipComponent()
 	WhipMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Whip.IMC_Whip")));
 	SwordMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_SpiritSword.MI_SpiritSword")));
 	WhipLineMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_WhipLine.MI_WhipLine")));
+	PresentWhipLineMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Eras/MI_WhipLinePresent.MI_WhipLinePresent")));
 	ReleaseSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Engine/VREditor/Sounds/VR_ungrab_Cue.VR_ungrab_Cue")));
 	LashSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Engine/VREditor/Sounds/VR_click3_Cue.VR_click3_Cue")));
 }
@@ -544,6 +546,19 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 		return;
 	}
 	bLineShown = true;
+
+	// Each machine draws the line in its own era's style
+	EEchoEra ViewerEra = EEchoEra::Past;
+	const bool bPresentView = EchoVisibility::GetLocalViewerEra(GetWorld(), ViewerEra) && ViewerEra == EEchoEra::Present;
+	if (bPresentView != bLineInPresentStyle)
+	{
+		bLineInPresentStyle = bPresentView;
+		UMaterialInterface* Look = bPresentView && !PresentWhipLineMaterial.IsNull() ? PresentWhipLineMaterial.LoadSynchronous() : WhipLineMaterial.LoadSynchronous();
+		if (Look)
+		{
+			WhipLine->SetMaterial(0, Look);
+		}
+	}
 
 	// Sword raised at the shoulder, pointing at the anchor (or along the lash); the line runs from its tip
 	const FVector Hand = Character->GetActorTransform().TransformPosition(HeldLocation);

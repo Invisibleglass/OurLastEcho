@@ -74,6 +74,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Arrow")
 	TSoftObjectPtr<UMaterialInterface> TrailMaterial;
 
+	/** The arrow and trail as seen from Saraa's past: a spirit arrow from the present (chosen locally per machine) */
+	UPROPERTY(EditDefaultsOnly, Category="Arrow")
+	TSoftObjectPtr<UMaterialInterface> PastArrowMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category="Arrow")
+	TSoftObjectPtr<UMaterialInterface> PastTrailMaterial;
+
 	/** Played on every machine when the arrow appears */
 	UPROPERTY(EditDefaultsOnly, Category="Arrow")
 	TSoftObjectPtr<USoundBase> ReleaseSound;

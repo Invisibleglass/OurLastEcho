@@ -4,6 +4,7 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "EchoEraDirector.h"
 #include "EchoGameState.h"
 #include "OurLastEchoCharacter.h"
 
@@ -23,6 +24,24 @@ bool EchoVisibility::GetLocalViewerRealm(const UWorld* World, EEchoRealm& OutRea
 
 	OutRealm = Character->GetRealm();
 	return true;
+}
+
+bool EchoVisibility::GetLocalViewerEra(const UWorld* World, EEchoEra& OutEra)
+{
+	if (const AEchoEraDirector* Director = AEchoEraDirector::Get(World))
+	{
+		if (Director->GetShownEra(OutEra))
+		{
+			return true;
+		}
+	}
+	EEchoRealm Realm;
+	if (GetLocalViewerRealm(World, Realm))
+	{
+		OutEra = EchoEraForRealm(Realm);
+		return true;
+	}
+	return false;
 }
 
 bool EchoVisibility::IsDebugShowAll(const UWorld* World)

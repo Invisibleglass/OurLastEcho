@@ -144,6 +144,27 @@ def expr(mat, cls, x, y, **props):
     return e
 
 
+ERA_DIR = "/Game/Echo/Eras"
+
+
+def era_collection():
+    """/Game/Echo/Eras/MPC_Era with one scalar, Past (0 = present, 1 = past), set per machine by AEchoEraDirector"""
+    path = f"{ERA_DIR}/MPC_Era"
+    if eal.does_asset_exist(path):
+        mpc = eal.load_asset(path)
+    else:
+        mpc = asset_tools.create_asset("MPC_Era", ERA_DIR, unreal.MaterialParameterCollection, unreal.MaterialParameterCollectionFactoryNew())
+    params = list(mpc.get_editor_property("scalar_parameters"))
+    if not any(str(p.get_editor_property("parameter_name")) == "Past" for p in params):
+        p = unreal.CollectionScalarParameter()
+        p.set_editor_property("parameter_name", "Past")
+        p.set_editor_property("default_value", 0.0)
+        params.append(p)
+        mpc.set_editor_property("scalar_parameters", params)
+    eal.save_asset(path, only_if_is_dirty=False)
+    return mpc
+
+
 def build_rock_material():
     """
     Lit, texture-free rock: horizontal sedimentary bands from world Z (wobbled by X/Y so they
@@ -240,8 +261,39 @@ def build_rock_material():
     mel.connect_material_expressions(lerp_c, "", final, "A")
     mel.connect_material_expressions(noise, "", final, "B")
 
+    # Era look (Milestone 6). Past = how much of the ancient past to show: on shared-layer surfaces (the canyon
+    # floor, rock mounts) it's MPC_Era's "Past" value, which the era director sets on each machine to the era it
+    # shows; era-layer copies set UseEraCollection 0 and pin their era with FixedEra (0 present, 1 past).
+    # Present: dusty and a little desaturated. Past: cooler, greener, full colour.
+    collection = era_collection()
+    mpc_past = expr(mat, unreal.MaterialExpressionCollectionParameter, 450, 250, collection=collection, parameter_name="Past")
+    use_mpc = expr(mat, unreal.MaterialExpressionScalarParameter, 450, 350, parameter_name="UseEraCollection", default_value=1.0)
+    fixed_era = expr(mat, unreal.MaterialExpressionScalarParameter, 450, 450, parameter_name="FixedEra", default_value=0.0)
+    past_amount = expr(mat, unreal.MaterialExpressionLinearInterpolate, 650, 350)
+    mel.connect_material_expressions(fixed_era, "", past_amount, "A")
+    mel.connect_material_expressions(mpc_past, "", past_amount, "B")
+    mel.connect_material_expressions(use_mpc, "", past_amount, "Alpha")
+    present_tint = expr(mat, unreal.MaterialExpressionVectorParameter, 650, -350, parameter_name="PresentTint",
+                        default_value=unreal.LinearColor(1.0, 0.94, 0.82, 1.0))
+    past_tint = expr(mat, unreal.MaterialExpressionVectorParameter, 650, -200, parameter_name="PastTint",
+                     default_value=unreal.LinearColor(0.7, 0.95, 0.72, 1.0))
+    tint = expr(mat, unreal.MaterialExpressionLinearInterpolate, 850, -250)
+    mel.connect_material_expressions(present_tint, "", tint, "A")
+    mel.connect_material_expressions(past_tint, "", tint, "B")
+    mel.connect_material_expressions(past_amount, "", tint, "Alpha")
+    present_desat = expr(mat, unreal.MaterialExpressionScalarParameter, 650, 150, parameter_name="PresentDesaturation", default_value=0.3)
+    desat_amount = expr(mat, unreal.MaterialExpressionLinearInterpolate, 850, 150, const_b=0.0)
+    mel.connect_material_expressions(present_desat, "", desat_amount, "A")
+    mel.connect_material_expressions(past_amount, "", desat_amount, "Alpha")
+    desat = expr(mat, unreal.MaterialExpressionDesaturation, 850, -100)
+    mel.connect_material_expressions(final, "", desat, "")
+    mel.connect_material_expressions(desat_amount, "", desat, "Fraction")
+    graded = expr(mat, unreal.MaterialExpressionMultiply, 1050, -150)
+    mel.connect_material_expressions(desat, "", graded, "A")
+    mel.connect_material_expressions(tint, "", graded, "B")
+
     rough = expr(mat, unreal.MaterialExpressionScalarParameter, 300, 250, parameter_name="Roughness", default_value=0.93)
-    mel.connect_material_property(final, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(graded, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
     mel.recompile_material(mat)
     eal.save_asset(path, only_if_is_dirty=False)

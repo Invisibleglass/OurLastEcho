@@ -29,3 +29,19 @@ enum class EEchoRealm : uint8
  *  nobody can stand on yet.
  */
 #define ECC_EchoArrow ECC_GameTraceChannel2
+
+/** Which era of the canyon a player sees: Bat the present, Saraa the ancient past */
+UENUM(BlueprintType)
+enum class EEchoEra : uint8
+{
+	/** Dry, eroded, present-day canyon (Bat's) */
+	Present,
+	/** Lush, ancient canyon (Saraa's) */
+	Past
+};
+
+/** The era a character of this realm sees */
+inline EEchoEra EchoEraForRealm(EEchoRealm Realm)
+{
+	return Realm == EEchoRealm::Living ? EEchoEra::Present : EEchoEra::Past;
+}
