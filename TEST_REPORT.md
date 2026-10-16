@@ -324,8 +324,15 @@ Tested on 2026-10-16 on branch `milestone-7-online`.
 6. **Misleading sign-in message** when the Dev Auth Tool isn't running. It now names the tool.
 7. **The EOS SDK printed the product's IDs in the log at start-up.** Its logging is limited to warnings and errors.
 
-### Not yet run (waiting for the user's go)
+### Network emulation and the 30-minute soak (run when the user said go)
 
-- EOS with network emulation, average and bad: `run_eos_test.ps1 -NetEmu average|bad`
-- The 30-minute soak (disconnects, drift, ping, memory): `run_eos_test.ps1 -SoakMinutes 30`
-- Swapped roles over EOS, and a real test on two PCs on different internet connections, with a friend (`MANUAL_TEST.md`)
+| Test | Result |
+|---|---|
+| EOS, **average** connection (`-NetEmu average`: 60 ms ± 10, 1% loss, on both games) | ✅ PASS / PASS: the whole flow above. Ping host 480 ms / guest 457 ms. Both games on one PC talk through Epic's relay, and the emulated lag is added on both ends, so these numbers are much worse than two real home connections. |
+| EOS, **bad** connection (`-NetEmu bad`: 150 ms ± 30, 5% loss) | ✅ PASS / PASS. Ping 628 / 445 ms. |
+| **30-minute soak** (`-SoakMinutes 30`): in the game together; every minute Saraa walks and jumps for 25 s through her predicted movement, then both record where she stands | ✅ PASS / PASS. **No disconnects.** **Drift:** Saraa's position on Bat's screen vs her own, standing still, max **0.1 cm** over 30 samples (every minute 0). **Ping:** 130–180 ms in the first minute through the relay, then EOS found a direct route: **14–23 ms, average 16 ms**, for the rest of the run. **Memory** (from the session logs, a sample every 10 s): flat at about **2,820 MB** per game from minute 3 to minute 30 (no growth), then 2,090 MB after both returned to the title screen. |
+
+### Not yet run
+
+- Swapped roles over EOS (the guest hosting). Hosting doesn't depend on which account hosts, and the PIE tests already cover the host playing Saraa.
+- **The real test on two PCs, on different internet connections, with a friend:** `MANUAL_TEST.md`. It's the only way to check real NAT traversal, voice audio, the Epic overlay invites, and account-portal sign-in (these tests sign in through the Dev Auth Tool).
