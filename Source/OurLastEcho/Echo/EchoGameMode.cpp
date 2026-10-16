@@ -33,8 +33,12 @@ UClass* AEchoGameMode::GetDefaultPawnClassForController_Implementation(AControll
 		FirstController = InController;
 	}
 
+	// The host is the listen server's own (local) player. Arrival order isn't enough: after seamless travel
+	// (online games, Milestone 7) players can arrive in either order. Without a listen server, the first player.
+	const APlayerController* PC = Cast<APlayerController>(InController);
+	const bool bIsHost = GetNetMode() == NM_ListenServer ? (PC && PC->IsLocalController()) : FirstController.Get() == InController;
 	const bool bSwapRoles = bHostPlaysSaraa || CVarEchoHostPlaysSaraa.GetValueOnGameThread();
-	const bool bIsBat = (FirstController.Get() == InController) != bSwapRoles;
+	const bool bIsBat = bIsHost != bSwapRoles;
 	const TSubclassOf<APawn> PawnClass = bIsBat ? BatPawnClass : SaraaPawnClass;
 
 	if (!PawnClass)

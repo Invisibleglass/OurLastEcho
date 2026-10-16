@@ -144,8 +144,13 @@ bool AEchoFrontEndGameMode::StartGame(APlayerController* RequestedBy)
 	bStarting = true;
 	UEchoNetDiagnostics::Log(this, FString::Printf(TEXT("Lobby: starting the game (%s)"), *GameplayMap));
 	// The host's controller is recreated first on the new map, so the gameplay game mode makes the host Bat again
-	// LAN games stay on plain IP sockets (EOS games keep their peer-to-peer listen, see UEchoSessionSubsystem)
-	GetWorld()->ServerTravel(GameplayMap + (EchoOnline::IsEOS(this) ? TEXT("?listen") : TEXT("?listen?bUseIPSockets")), true);
+	// Online (EOS): seamless travel, so the peer-to-peer connection stays open. A hard travel closes it, and EOS
+	// then refuses the guest's reconnect for a while (the guest was left behind on the title screen).
+	// LAN and Play-In-Editor keep the hard travel, proven there since Milestone 5; LAN stays on plain IP sockets.
+	const bool bEOS = EchoOnline::IsEOS(this);
+	bUseSeamlessTravel = bEOS && !GetWorld()->IsPlayInEditor();
+	UEchoNetDiagnostics::Log(this, FString::Printf(TEXT("Lobby: %s travel to the game"), bUseSeamlessTravel ? TEXT("seamless") : TEXT("hard")));
+	GetWorld()->ServerTravel(GameplayMap + (bEOS ? TEXT("?listen") : TEXT("?listen?bUseIPSockets")), !bUseSeamlessTravel);
 	return true;
 }
 
