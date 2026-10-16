@@ -30,7 +30,10 @@ public class OurLastEcho : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "Landscape", "SlateCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Landscape", "SlateCore", "DeveloperSettings" });
+
+		// Epic Online Services (Milestone 7): the EOS online subsystem's voice chat user, for push-to-talk and the speaking indicator
+		PrivateDependencyModuleNames.AddRange(new string[] { "OnlineSubsystemEOS", "VoiceChat" });
 
 		// Editor-only builder helpers (EchoEditorLibrary)
 		if (Target.bBuildEditor)
@@ -43,6 +46,7 @@ public class OurLastEcho : ModuleRules
 			"OurLastEcho/Echo",
 			"OurLastEcho/Echo/Eras",
 			"OurLastEcho/Echo/FrontEnd",
+			"OurLastEcho/Echo/Online",
 			"OurLastEcho/Echo/Settings",
 			"OurLastEcho/Echo/UI",
 			"OurLastEcho/Variant_Platforming",

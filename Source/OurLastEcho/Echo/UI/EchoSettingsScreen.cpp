@@ -77,6 +77,7 @@ bool UEchoSettingsScreen::FValues::Equals(const FValues& Other) const
 		&& FMath::IsNearlyEqual(FrameRateLimit, Other.FrameRateLimit) && FMath::IsNearlyEqual(Brightness, Other.Brightness)
 		&& FMath::IsNearlyEqual(Master, Other.Master) && FMath::IsNearlyEqual(Music, Other.Music) && FMath::IsNearlyEqual(Effects, Other.Effects)
 		&& FMath::IsNearlyEqual(Dialogue, Other.Dialogue) && FMath::IsNearlyEqual(Voice, Other.Voice) && bMicrophone == Other.bMicrophone
+		&& VoiceMode == Other.VoiceMode && PushToTalkKey == Other.PushToTalkKey && bNetStats == Other.bNetStats
 		&& FMath::IsNearlyEqual(Mouse, Other.Mouse) && FMath::IsNearlyEqual(Aim, Other.Aim) && FMath::IsNearlyEqual(Gamepad, Other.Gamepad)
 		&& bInvertY == Other.bInvertY && AimMode == Other.AimMode && bSubtitles == Other.bSubtitles
 		&& FMath::IsNearlyEqual(SubtitleScale, Other.SubtitleScale) && bReduceShake == Other.bReduceShake;
@@ -97,6 +98,9 @@ UEchoSettingsScreen::FValues UEchoSettingsScreen::Capture(const UEchoGameUserSet
 	Values.Dialogue = Settings->DialogueVolume;
 	Values.Voice = Settings->VoiceChatVolume;
 	Values.bMicrophone = Settings->bMicrophoneEnabled;
+	Values.VoiceMode = static_cast<uint8>(Settings->VoiceMode);
+	Values.PushToTalkKey = Settings->PushToTalkKey;
+	Values.bNetStats = Settings->bShowNetworkStats;
 	Values.Mouse = Settings->MouseSensitivity;
 	Values.Aim = Settings->AimSensitivity;
 	Values.Gamepad = Settings->GamepadSensitivity;
@@ -125,6 +129,9 @@ void UEchoSettingsScreen::Restore(UEchoGameUserSettings* Settings, const FValues
 	Settings->DialogueVolume = Values.Dialogue;
 	Settings->VoiceChatVolume = Values.Voice;
 	Settings->bMicrophoneEnabled = Values.bMicrophone;
+	Settings->VoiceMode = static_cast<EEchoVoiceMode>(Values.VoiceMode);
+	Settings->PushToTalkKey = Values.PushToTalkKey;
+	Settings->bShowNetworkStats = Values.bNetStats;
 	Settings->MouseSensitivity = Values.Mouse;
 	Settings->AimSensitivity = Values.Aim;
 	Settings->GamepadSensitivity = Values.Gamepad;
@@ -408,6 +415,10 @@ void UEchoSettingsScreen::BuildGraphics()
 		S->Brightness = Value;
 		S->ApplyDisplayAndAccessibility();
 	});
+
+	Row = AddRow();
+	RowsByLabel.Add(TEXT("Network stats"), Row);
+	Row->InitToggle(LOCTEXT("NetStats", "Network stats overlay (ping, loss, bandwidth)"), S->bShowNetworkStats, [S](bool bOn) { S->bShowNetworkStats = bOn; });
 }
 
 void UEchoSettingsScreen::BuildAudio()
@@ -438,6 +449,26 @@ void UEchoSettingsScreen::BuildAudio()
 	UEchoSettingRow* Row = AddRow();
 	RowsByLabel.Add(TEXT("Microphone"), Row);
 	Row->InitToggle(LOCTEXT("Mic", "Microphone (voice chat)"), S->bMicrophoneEnabled, [S](bool bOn) { S->bMicrophoneEnabled = bOn; });
+
+	Row = AddRow();
+	RowsByLabel.Add(TEXT("Voice mode"), Row);
+	Row->InitOptions(LOCTEXT("VoiceMode", "Voice mode"), { LOCTEXT("OpenMic", "Open mic"), LOCTEXT("PushToTalk", "Push-to-talk") },
+		static_cast<int32>(S->VoiceMode), [S](int32 Index) { S->VoiceMode = static_cast<EEchoVoiceMode>(Index); });
+
+	Row = AddRow();
+	RowsByLabel.Add(TEXT("Push-to-talk key"), Row);
+	Row->InitKey(LOCTEXT("PushToTalkKey", "Push-to-talk key (gamepad: left stick click)"), S->PushToTalkKey, [this, S](const FKey& NewKey)
+	{
+		// The row shows the new key itself; a gamepad button isn't kept (the gamepad key is fixed)
+		if (!NewKey.IsGamepadKey())
+		{
+			S->PushToTalkKey = NewKey;
+		}
+		else
+		{
+			StatusText->SetText(LOCTEXT("PttGamepad", "The gamepad push-to-talk is the left stick click; choose a keyboard or mouse key here."));
+		}
+	});
 }
 
 void UEchoSettingsScreen::BuildControls()

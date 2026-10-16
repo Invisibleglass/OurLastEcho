@@ -9,6 +9,10 @@
 
 class UWidget;
 class APlayerController;
+class UEchoSessionSubsystem;
+class UEchoLoginSubsystem;
+class UEchoVoiceSubsystem;
+class UEchoNetDiagnostics;
 
 /**
  *  Sends real input to the UI through Slate, for the front-end tests: key presses (keyboard or gamepad buttons,
@@ -63,4 +67,27 @@ public:
 	/** Name of the UMG widget class that has focus (e.g. EchoButton), for logs */
 	UFUNCTION(BlueprintPure, Category="Echo|Test")
 	static FString GetFocusedWidgetDescription();
+
+	// ---- Online subsystems of a world's game instance (Python in -game can't reach game instance subsystems
+	// through SubsystemBlueprintLibrary)
+
+	UFUNCTION(BlueprintPure, Category="Echo|Test", meta=(WorldContext="WorldContextObject"))
+	static UEchoSessionSubsystem* GetSessions(const UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintPure, Category="Echo|Test", meta=(WorldContext="WorldContextObject"))
+	static UEchoLoginSubsystem* GetLogin(const UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintPure, Category="Echo|Test", meta=(WorldContext="WorldContextObject"))
+	static UEchoVoiceSubsystem* GetVoice(const UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintPure, Category="Echo|Test", meta=(WorldContext="WorldContextObject"))
+	static UEchoNetDiagnostics* GetNetDiagnostics(const UObject* WorldContextObject);
+
+	/** The online service this world uses ("EOS", "NULL") */
+	UFUNCTION(BlueprintPure, Category="Echo|Test", meta=(WorldContext="WorldContextObject"))
+	static FString GetOnlineService(const UObject* WorldContextObject);
+
+	/** The game instance's pending title-screen message (e.g. "The host left the game.") */
+	UFUNCTION(BlueprintPure, Category="Echo|Test", meta=(WorldContext="WorldContextObject"))
+	static FString GetPendingMessage(const UObject* WorldContextObject);
 };

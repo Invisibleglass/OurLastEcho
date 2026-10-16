@@ -8,6 +8,14 @@
 #include "Containers/Ticker.h"
 #include "Widgets/SWindow.h"
 #include "GameFramework/PlayerController.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "EchoGameInstance.h"
+#include "EchoLoginSubsystem.h"
+#include "EchoNetDiagnostics.h"
+#include "EchoOnline.h"
+#include "EchoSessionSubsystem.h"
+#include "EchoVoiceSubsystem.h"
 
 bool UEchoUITestLibrary::SendKey(FKey Key)
 {
@@ -153,4 +161,47 @@ FString UEchoUITestLibrary::GetFocusedWidgetDescription()
 	}
 	const TSharedPtr<SWidget> Focused = FSlateApplication::Get().GetUserFocusedWidget(0);
 	return Focused.IsValid() ? Focused->GetTypeAsString() + TEXT(" ") + Focused->GetReadableLocation() : TEXT("nothing");
+}
+
+namespace
+{
+	template <typename T>
+	T* GameInstanceSubsystemFor(const UObject* WorldContextObject)
+	{
+		const UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+		const UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+		return GameInstance ? GameInstance->GetSubsystem<T>() : nullptr;
+	}
+}
+
+UEchoSessionSubsystem* UEchoUITestLibrary::GetSessions(const UObject* WorldContextObject)
+{
+	return GameInstanceSubsystemFor<UEchoSessionSubsystem>(WorldContextObject);
+}
+
+UEchoLoginSubsystem* UEchoUITestLibrary::GetLogin(const UObject* WorldContextObject)
+{
+	return GameInstanceSubsystemFor<UEchoLoginSubsystem>(WorldContextObject);
+}
+
+UEchoVoiceSubsystem* UEchoUITestLibrary::GetVoice(const UObject* WorldContextObject)
+{
+	return GameInstanceSubsystemFor<UEchoVoiceSubsystem>(WorldContextObject);
+}
+
+UEchoNetDiagnostics* UEchoUITestLibrary::GetNetDiagnostics(const UObject* WorldContextObject)
+{
+	return GameInstanceSubsystemFor<UEchoNetDiagnostics>(WorldContextObject);
+}
+
+FString UEchoUITestLibrary::GetOnlineService(const UObject* WorldContextObject)
+{
+	return EchoOnline::GetServiceName(WorldContextObject);
+}
+
+FString UEchoUITestLibrary::GetPendingMessage(const UObject* WorldContextObject)
+{
+	const UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	const UEchoGameInstance* GameInstance = World ? World->GetGameInstance<UEchoGameInstance>() : nullptr;
+	return GameInstance ? GameInstance->PeekPendingMessage().ToString() : FString();
 }

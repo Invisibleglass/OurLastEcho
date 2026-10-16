@@ -55,7 +55,8 @@ void AEchoGameMode::Logout(AController* Exiting)
 	PlayersInPauseMenu.Remove(Cast<APlayerController>(Exiting));
 	RefreshMenuPause();
 
-	// The other player left an online game: the host goes back to the title screen too, and says why.
+	// The other player left an online game: the host goes back to their lobby (the session and its join code stay,
+	// so the friend can come back or someone else can join), and says why.
 	// (Not while the world is being torn down, e.g. the host leaving or Play-In-Editor stopping.)
 	UWorld* World = GetWorld();
 	const APlayerController* Leaver = Cast<APlayerController>(Exiting);
@@ -70,7 +71,7 @@ void AEchoGameMode::Logout(AController* Exiting)
 	const FText Message = HostCharacter && HostCharacter->GetRealm() == EEchoRealm::Spirit
 		? NSLOCTEXT("EchoGame", "BatLeft", "Bat left the game.")
 		: NSLOCTEXT("EchoGame", "SaraaLeft", "Saraa left the game.");
-	UE_LOG(LogOurLastEcho, Log, TEXT("EchoGameMode: %s left, returning the host to the title screen"), *GetNameSafe(Exiting));
+	UE_LOG(LogOurLastEcho, Log, TEXT("EchoGameMode: %s left, returning the host to the lobby"), *GetNameSafe(Exiting));
 
 	// Next tick: loading a map from inside Logout isn't safe
 	TWeakObjectPtr<UWorld> WeakWorld(World);
@@ -78,7 +79,7 @@ void AEchoGameMode::Logout(AController* Exiting)
 	{
 		if (UEchoGameInstance* GameInstance = WeakWorld.IsValid() ? WeakWorld->GetGameInstance<UEchoGameInstance>() : nullptr)
 		{
-			GameInstance->ReturnToTitle(Message);
+			GameInstance->ReturnToLobby(Message);
 		}
 	});
 }

@@ -34,3 +34,9 @@ Content/Developers/
 
 # Local Claude settings (personal permissions)
 .claude/settings.local.json
+
+# Epic Online Services IDs and client secret (Milestone 7): local only, see Config/EOSCredentials.example.ini
+Config/Windows/WindowsEngine.ini
+
+# Packaged builds
+Packaged/

@@ -70,6 +70,14 @@
 			"Enabled": true
 		},
 		{
+			"Name": "OnlineSubsystemEOS",
+			"Enabled": true
+		},
+		{
+			"Name": "EOSVoiceChat",
+			"Enabled": true
+		},
+		{
 			"Name": "OnlineSubsystemUtils",
 			"Enabled": true
 		},

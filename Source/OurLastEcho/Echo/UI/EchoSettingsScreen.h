@@ -119,6 +119,9 @@ protected:
 		float Dialogue = 1.0f;
 		float Voice = 1.0f;
 		bool bMicrophone = true;
+		uint8 VoiceMode = 0;
+		FKey PushToTalkKey;
+		bool bNetStats = false;
 		float Mouse = 1.0f;
 		float Aim = 1.0f;
 		float Gamepad = 1.0f;

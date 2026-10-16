@@ -11,6 +11,8 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "EchoNetDiagnostics.h"
+#include "EchoOnline.h"
 #include "OurLastEchoCharacter.h"
 #include "OurLastEcho.h"
 
@@ -264,11 +266,27 @@ TArray<AActor*> AEchoEraDirector::GetEraActors(EEchoEra Era) const
 
 void AEchoEraDirector::HoldBlack(APlayerController* PC)
 {
-	if (PC && PC->PlayerCameraManager)
+	if (!PC || !PC->PlayerCameraManager || bBlackTimedOut)
 	{
-		PC->PlayerCameraManager->SetManualCameraFade(1.0f, FLinearColor::Black, false);
-		bHeldBlack = true;
+		return;
 	}
+	// Never stuck on black (Milestone 7): after MaxBlackScreenSeconds, show the game even if the era isn't in
+	const double Now = FPlatformTime::Seconds();
+	if (!bHeldBlack)
+	{
+		BlackSince = Now;
+	}
+	const float MaxBlack = GetDefault<UEchoOnlineSettings>()->MaxBlackScreenSeconds;
+	if (Now - BlackSince > MaxBlack)
+	{
+		bBlackTimedOut = true;
+		bHeldBlack = false;
+		PC->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, FadeInTime, FLinearColor::Black, false, false);
+		UEchoNetDiagnostics::Log(this, FString::Printf(TEXT("Eras: still waiting after %.0f s (no character or era yet), fading in anyway"), MaxBlack));
+		return;
+	}
+	PC->PlayerCameraManager->SetManualCameraFade(1.0f, FLinearColor::Black, false);
+	bHeldBlack = true;
 }
 
 void AEchoEraDirector::ApplyEraParameter(bool bWantPresent, bool bWantPast)

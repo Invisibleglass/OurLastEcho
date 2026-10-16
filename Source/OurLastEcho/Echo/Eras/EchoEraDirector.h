@@ -122,4 +122,8 @@ protected:
 	bool bShowBoth = false;
 	bool bHeldBlack = false;
 	bool bReady = false;
+
+	/** When the current black hold started (wall clock: also counts while paused), and whether it ran too long */
+	double BlackSince = 0.0;
+	bool bBlackTimedOut = false;
 };

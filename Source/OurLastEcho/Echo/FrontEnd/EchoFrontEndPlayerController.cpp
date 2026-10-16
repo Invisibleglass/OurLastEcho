@@ -6,6 +6,7 @@
 #include "EchoFrontEndGameMode.h"
 #include "EchoGameInstance.h"
 #include "EchoGameUserSettings.h"
+#include "EchoLoginSubsystem.h"
 #include "EchoMenuScreens.h"
 #include "EchoTitleScene.h"
 #include "EchoUIWidgets.h"
@@ -37,8 +38,14 @@ void AEchoFrontEndPlayerController::BeginPlay()
 	UIRoot = CreateWidget<UEchoUIRoot>(this, UEchoUIRoot::StaticClass());
 	UIRoot->AddToPlayerScreen(10);
 
-	// A plain title screen shows the main menu; a hosted or joined game (listen server or client) is the lobby
-	if (GetNetMode() == NM_Standalone)
+	// A plain title screen shows the main menu (after signing in, once per run); a hosted or joined game (listen
+	// server or client) is the lobby
+	const UEchoLoginSubsystem* Login = GetGameInstance() ? GetGameInstance()->GetSubsystem<UEchoLoginSubsystem>() : nullptr;
+	if (GetNetMode() == NM_Standalone && Login && !Login->IsLoggedIn())
+	{
+		UIRoot->Push<UEchoLoginScreen>();
+	}
+	else if (GetNetMode() == NM_Standalone)
 	{
 		UIRoot->Push<UEchoMainMenuScreen>();
 	}

@@ -33,6 +33,10 @@ void UEchoGameUserSettings::SetToDefaults()
 	DialogueVolume = 1.0f;
 	VoiceChatVolume = 1.0f;
 	bMicrophoneEnabled = true;
+	VoiceMode = EEchoVoiceMode::OpenMic;
+	PushToTalkKey = EKeys::V;
+	PushToTalkGamepadKey = EKeys::Gamepad_LeftThumbstick;
+	bShowNetworkStats = false;
 	MouseSensitivity = 1.0f;
 	AimSensitivity = 0.6f;
 	GamepadSensitivity = 1.0f;

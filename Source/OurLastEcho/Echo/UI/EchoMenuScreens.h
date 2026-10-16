@@ -6,7 +6,44 @@
 #include "EchoUIWidgets.h"
 #include "EchoMenuScreens.generated.h"
 
+class UEditableTextBox;
 class UScrollBox;
+
+/**
+ *  First screen of a run (Milestone 7): signs in with the Epic account (UEchoLoginSubsystem), then gives way to
+ *  the main menu. On failure: the reason, Try Again and Quit.
+ */
+UCLASS()
+class UEchoLoginScreen : public UEchoScreen
+{
+	GENERATED_BODY()
+
+public:
+
+	UFUNCTION(BlueprintPure, Category="Echo|UI")
+	FString GetStatusText() const;
+
+protected:
+
+	virtual void BuildContent(UVerticalBox* Content) override;
+	virtual void NativeOnActivated() override;
+	virtual void NativeDestruct() override;
+	virtual void OnBack() override;
+
+	void Refresh();
+	void HandleLoginChanged();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> StatusText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> HintText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEchoButton> RetryButton;
+
+	bool bDone = false;
+};
 
 /** Title screen: the game's name and Play, Settings, Credits, Quit */
 UCLASS()
@@ -17,11 +54,18 @@ class UEchoMainMenuScreen : public UEchoScreen
 protected:
 
 	virtual void BuildContent(UVerticalBox* Content) override;
+	virtual void NativeOnActivated() override;
+	virtual void NativeDestruct() override;
 
 	/** The main menu is the bottom of the stack: Back offers to quit */
 	virtual void OnBack() override;
 
 	void AskToQuit();
+
+	/** An invite arrived (or was waiting): offer to join */
+	void OfferInvite();
+
+	bool bInviteDialogOpen = false;
 };
 
 /** Play: Host Game or Join Game */
@@ -38,7 +82,10 @@ protected:
 	void Host();
 };
 
-/** Join Game: games found on the network, Refresh and Back */
+/**
+ *  Join Game: type the host's join code (internet and LAN), or on LAN pick a game found on the network.
+ *  Invites need no screen: accepting one in the Epic overlay joins straight away.
+ */
 UCLASS()
 class UEchoJoinMenuScreen : public UEchoScreen
 {
@@ -46,13 +93,17 @@ class UEchoJoinMenuScreen : public UEchoScreen
 
 public:
 
-	/** Searches again */
+	/** Searches again (LAN list) */
 	UFUNCTION(BlueprintCallable, Category="Echo|UI")
 	void Refresh();
 
 	/** Joins the first game in the list (for tests); false if there's none */
 	UFUNCTION(BlueprintCallable, Category="Echo|UI")
 	bool JoinFirstGame();
+
+	/** Types a code into the code box and presses Join (for tests) */
+	UFUNCTION(BlueprintCallable, Category="Echo|UI")
+	void JoinWithCode(const FString& Code);
 
 	UFUNCTION(BlueprintPure, Category="Echo|UI")
 	int32 GetNumGamesListed() const { return GameButtons.Num(); }
@@ -66,6 +117,14 @@ protected:
 	void HandleFindComplete(bool bSuccess, const FText& Error);
 	void HandleJoinComplete(bool bSuccess, const FText& Error);
 	void Join(int32 SessionIndex);
+	void JoinCode();
+	void ShowJoining();
+
+	UFUNCTION()
+	void HandleCodeCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEditableTextBox> CodeBox;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> StatusText;
@@ -93,6 +152,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Echo|UI")
 	FString GetPlayersText() const;
 
+	/** "Join code: K7Q2MD" as shown ("" for the guest; for tests) */
+	UFUNCTION(BlueprintPure, Category="Echo|UI")
+	FString GetCodeText() const;
+
 protected:
 
 	virtual void BuildContent(UVerticalBox* Content) override;
@@ -100,6 +163,19 @@ protected:
 	virtual void OnBack() override;
 
 	void AskToLeave();
+	void InviteFriend();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> CodeLine;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> VoiceLine;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEchoButton> InviteButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEchoButton> FriendsButton;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> BatLine;
@@ -115,6 +191,27 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UEchoButton> StartButton;
+};
+
+/** Invite from a list of Epic friends (when the Epic overlay isn't available, or the player prefers it) */
+UCLASS()
+class UEchoInviteScreen : public UEchoScreen
+{
+	GENERATED_BODY()
+
+protected:
+
+	virtual void BuildContent(UVerticalBox* Content) override;
+	virtual void NativeOnActivated() override;
+	virtual void NativeDestruct() override;
+
+	void HandleFriendsRead(bool bSuccess, const FText& Error);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> StatusText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> FriendList;
 };
 
 /** Scrolling placeholder credits */

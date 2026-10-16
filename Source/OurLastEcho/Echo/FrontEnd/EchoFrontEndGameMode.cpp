@@ -5,6 +5,8 @@
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 #include "EchoFrontEndPlayerController.h"
+#include "EchoNetDiagnostics.h"
+#include "EchoOnline.h"
 #include "EchoSessionSubsystem.h"
 #include "OurLastEcho.h"
 
@@ -74,6 +76,7 @@ void AEchoFrontEndGameMode::PostLogin(APlayerController* NewPlayer)
 
 	if (IsLobby() && !NewPlayer->IsLocalController())
 	{
+		UEchoNetDiagnostics::Log(this, FString::Printf(TEXT("Lobby: %s joined"), NewPlayer->PlayerState ? *NewPlayer->PlayerState->GetPlayerName() : TEXT("a player")));
 		// Tell the host someone arrived
 		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 		{
@@ -95,6 +98,7 @@ void AEchoFrontEndGameMode::Logout(AController* Exiting)
 	}
 
 	// The other player left the lobby: the host stays, un-readies, and gets a message
+	UEchoNetDiagnostics::Log(this, TEXT("Lobby: the other player left"));
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		AEchoFrontEndPlayerController* PC = Cast<AEchoFrontEndPlayerController>(It->Get());
@@ -136,9 +140,10 @@ bool AEchoFrontEndGameMode::StartGame(APlayerController* RequestedBy)
 	}
 
 	bStarting = true;
-	UE_LOG(LogOurLastEcho, Log, TEXT("Lobby: starting the game (%s)"), *GameplayMap);
+	UEchoNetDiagnostics::Log(this, FString::Printf(TEXT("Lobby: starting the game (%s)"), *GameplayMap));
 	// The host's controller is recreated first on the new map, so the gameplay game mode makes the host Bat again
-	GetWorld()->ServerTravel(GameplayMap + TEXT("?listen"), true);
+	// LAN games stay on plain IP sockets (EOS games keep their peer-to-peer listen, see UEchoSessionSubsystem)
+	GetWorld()->ServerTravel(GameplayMap + (EchoOnline::IsEOS(this) ? TEXT("?listen") : TEXT("?listen?bUseIPSockets")), true);
 	return true;
 }
 

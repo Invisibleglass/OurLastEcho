@@ -29,9 +29,17 @@ public:
 	virtual void Init() override;
 	virtual void Shutdown() override;
 
-	/** Leaves any online session and loads the title screen, which will show Message (if any) */
+	/** Leaves any online session and loads the title screen, which will show Message (if any). A host first tells
+	 *  the other player, who goes to their title screen with "The host left the game." */
 	UFUNCTION(BlueprintCallable, Category="Echo|Front End")
 	void ReturnToTitle(const FText& Message);
+
+	/** Host only: back to this host's lobby (the session and join code stay), showing Message */
+	UFUNCTION(BlueprintCallable, Category="Echo|Front End")
+	void ReturnToLobby(const FText& Message);
+
+	/** The host sent us back (ClientReturnToMainMenuWithTextReason): the title screen, with why */
+	virtual void ReturnToMainMenu() override;
 
 	/** A message the title screen shows once it opens */
 	UFUNCTION(BlueprintCallable, Category="Echo|Front End")
@@ -69,6 +77,18 @@ public:
 	/** Leaves the lobby or the game for the title screen */
 	UFUNCTION(Exec)
 	void EchoLeave();
+
+	/** Joins the game with this join code */
+	UFUNCTION(Exec)
+	void EchoJoinCode(const FString& Code);
+
+	/** Shows or hides the network overlay (ping, packet loss, bandwidth); saved like the setting */
+	UFUNCTION(Exec)
+	void EchoNetStats();
+
+	/** Writes a note into the online session log (testers can mark moments: "EchoLogNote saw a pop") */
+	UFUNCTION(Exec)
+	void EchoLogNote(const FString& Note);
 
 private:
 

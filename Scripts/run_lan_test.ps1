@@ -1,4 +1,5 @@
-# Two real game processes (not Play-In-Editor) host and join over LAN (Online Subsystem Null), ready up and start;
+# Two real game processes (not Play-In-Editor) host and join over LAN (Online Subsystem Null, forced on the command
+# line since Milestone 7 made EOS the default), ready up and start;
 # runs Scripts/test_lan_standalone.py in each and prints both logs' ECHO_LAN lines. The editor must be closed.
 # Usage:  powershell -File Scripts/run_lan_test.ps1   (two small game windows open; takes about 2 minutes)
 # The games run windowed at the Low preset: with -nullrhi nothing is drawn and CommonUI screens never finish their
@@ -17,7 +18,8 @@ foreach ($Role in "host", "guest") {
     Remove-Item $Log -ErrorAction SilentlyContinue
     $Display = @("-windowed", "-ResX=960", "-ResY=540")
     $Games += Start-Process $Editor -PassThru -ArgumentList (@("`"$Project\OurLastEcho.uproject`"", "-game") + $Display +
-        @("-nosound", "-unattended", "-nosplash", "`"-ExecCmds=scalability 0, py $Script`"", "-abslog=$Log"))
+        @("-nosound", "-unattended", "-nosplash", "-ini:Engine:[OnlineSubsystem]:DefaultPlatformService=Null",
+          "`"-ExecCmds=scalability 0, py $Script`"", "-abslog=$Log"))
 }
 foreach ($Game in $Games) {
     $Game | Wait-Process -Timeout 240 -ErrorAction SilentlyContinue

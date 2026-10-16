@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameUserSettings.h"
+#include "InputCoreTypes.h"
 #include "EchoGameUserSettings.generated.h"
 
 class USoundClass;
@@ -16,6 +17,14 @@ enum class EEchoAimMode : uint8
 {
 	Hold,
 	Toggle
+};
+
+/** Voice chat: always transmitting, or only while the push-to-talk key is held */
+UENUM(BlueprintType)
+enum class EEchoVoiceMode : uint8
+{
+	OpenMic,
+	PushToTalk
 };
 
 /**
@@ -63,9 +72,26 @@ public:
 	UPROPERTY(Config, BlueprintReadWrite, Category="Echo|Settings|Audio")
 	float VoiceChatVolume = 1.0f;
 
-	/** Voice chat microphone (there's no voice chat yet: this is the switch it will read) */
+	/** Voice chat microphone: off = never transmit */
 	UPROPERTY(Config, BlueprintReadWrite, Category="Echo|Settings|Audio")
 	bool bMicrophoneEnabled = true;
+
+	UPROPERTY(Config, BlueprintReadWrite, Category="Echo|Settings|Audio")
+	EEchoVoiceMode VoiceMode = EEchoVoiceMode::OpenMic;
+
+	/** Held to talk in push-to-talk mode (keyboard or mouse; rebindable in Settings > Audio) */
+	UPROPERTY(Config, BlueprintReadWrite, Category="Echo|Settings|Audio")
+	FKey PushToTalkKey = EKeys::V;
+
+	/** Gamepad push-to-talk (left stick click) */
+	UPROPERTY(Config, BlueprintReadWrite, Category="Echo|Settings|Audio")
+	FKey PushToTalkGamepadKey = EKeys::Gamepad_LeftThumbstick;
+
+	// ---- Online
+
+	/** The network overlay: ping, packet loss and bandwidth (Settings > Graphics, or the EchoNetStats command) */
+	UPROPERTY(Config, BlueprintReadWrite, Category="Echo|Settings|Online")
+	bool bShowNetworkStats = false;
 
 	// ---- Controls
 
