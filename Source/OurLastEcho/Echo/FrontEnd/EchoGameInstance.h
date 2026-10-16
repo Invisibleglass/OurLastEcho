@@ -96,6 +96,9 @@ private:
 	void HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType, const FString& ErrorString);
 
 	FText PendingMessage;
+
+	/** Inside ReturnToTitle (it must never run inside itself) */
+	bool bReturningToTitle = false;
 	FDelegateHandle NetworkFailureHandle;
 	FDelegateHandle TravelFailureHandle;
 };

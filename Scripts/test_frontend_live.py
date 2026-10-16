@@ -494,24 +494,44 @@ def online_scenario():
     ok = yield from wait_for(lambda: not gs.is_game_paused(world(0)) and not gs.is_game_paused(world(1)), 3.0)
     check(ok, "and the game resumes for both players")
 
-    # The guest leaves: both end up on the title screen, the host with a message
+    # The guest leaves: the guest goes to the title screen; the host back to their lobby (same session and join
+    # code, Milestone 7), with a message
+    code = ui.get_sessions(world(0)).get_join_code()
     ui.queue_console_command(guest, "EchoMenu")
     yield from wait_for(lambda: top_is(1, "EchoPauseMenuScreen"), 2.0)
     yield from click(1, "Leave Game")
     yield from wait_for(lambda: top_is(1, "EchoDialog"), 2.0)
     yield from click(1, "Leave")
     ok = yield from wait_for(lambda: map_name(0) == "TitleScreen" and map_name(1) == "TitleScreen" and top(0) is not None, 30.0)
-    check(ok, f"Leave Game returns both players to the title screen ({map_name(0)}, {map_name(1)})")
+    check(ok, f"Leave Game takes both players off the level ({map_name(0)}, {map_name(1)})")
     leftovers = [len(gs.get_all_actors_of_class(world(i), unreal.EchoInstancedProps)) + len(gs.get_all_actors_of_class(world(i), unreal.EchoEraDirector)) for i in (0, 1)]
     check(ok and leftovers == [0, 0], f"... and nothing of either era is left loaded ({leftovers})")
+    ok = yield from wait_for(lambda: net_mode(0) == "server" and net_mode(1) == "standalone", 10.0)
+    check(ok, f"the guest is on their title screen, the host back in their lobby ({net_mode(0)}, {net_mode(1)})")
     ok = yield from wait_for(lambda: top_is(0, "EchoDialog") and "Saraa left" in top(0).get_message_text(), 5.0)
     check(ok, f"the host is told why ({top(0).get_message_text() if top_is(0, 'EchoDialog') else top(0).get_class().get_name() if top(0) else None})")
     if top_is(0, "EchoDialog"):
         yield from click(0, "OK")
         yield 1.0
+    check(top_is(0, "EchoLobbyScreen") and code != "" and code in top(0).get_code_text(), f"the host's lobby still shows the same join code ({code}: {top(0).get_code_text() if top_is(0, 'EchoLobbyScreen') else '?'})")
+
+    # The guest comes back by typing the join code (Milestone 7)
+    yield from wait_for(lambda: top_is(1, "EchoMainMenuScreen"), 5.0)
+    yield from click(1, "Play")
+    yield from wait_for(lambda: top_is(1, "EchoPlayMenuScreen"), 2.0)
+    yield from click(1, "Join Game")
+    yield from wait_for(lambda: top_is(1, "EchoJoinMenuScreen"), 2.0)
+    top(1).join_with_code("ZZZZZZ")
+    ok = yield from wait_for(lambda: top_is(1, "EchoDialog") and "No game" in top(1).get_message_text(), 15.0)
+    check(ok, f"a wrong join code says so ({top(1).get_message_text() if top_is(1, 'EchoDialog') else top(1).get_class().get_name() if top(1) else None})")
+    if top_is(1, "EchoDialog"):
+        yield from click(1, "OK")
+    yield from wait_for(lambda: top_is(1, "EchoJoinMenuScreen"), 3.0)
+    top(1).join_with_code(code.lower())
+    ok = yield from wait_for(lambda: net_mode(1) == "client" and top_is(1, "EchoLobbyScreen"), 20.0)
+    check(ok, f"the guest rejoins the same lobby with the join code ({net_mode(1)})")
 
     # The host leaves during the game: the guest returns to the title screen with a message
-    ok = yield from host_and_join()
     if ok:
         yield from click(0, "Ready")
         yield from click(1, "Ready", queued=True)
@@ -533,6 +553,7 @@ def online_scenario():
         if top_is(1, "EchoDialog"):
             yield from click(1, "OK")
         yield 1.0
+        check(not ui.get_sessions(world(0)).is_in_session() and not ui.get_sessions(world(1)).is_in_session(), "... and neither is still in the session")
 
     # The host leaves the lobby: the guest returns to the title screen with a message
     yield from wait_for(lambda: top_is(0, "EchoMainMenuScreen") and top_is(1, "EchoMainMenuScreen"), 5.0)

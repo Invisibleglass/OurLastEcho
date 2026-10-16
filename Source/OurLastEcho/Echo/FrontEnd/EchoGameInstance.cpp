@@ -48,6 +48,11 @@ FText UEchoGameInstance::ConsumePendingMessage()
 
 void UEchoGameInstance::ReturnToTitle(const FText& Message)
 {
+	if (bReturningToTitle)
+	{
+		return;
+	}
+	TGuardValue<bool> Guard(bReturningToTitle, true);
 	UEchoNetDiagnostics::Log(this, FString::Printf(TEXT("Returning to the title screen%s%s"), Message.IsEmpty() ? TEXT("") : TEXT(": "), *Message.ToString()));
 	SetPendingMessage(Message);
 
@@ -90,7 +95,14 @@ void UEchoGameInstance::ReturnToLobby(const FText& Message)
 
 void UEchoGameInstance::ReturnToMainMenu()
 {
-	// The host is leaving (see ReturnToTitle); the engine's reason text doesn't reach us, but this is the only reason
+	// The host is leaving (see ReturnToTitle); the engine's reason text doesn't reach us, but this is the only reason.
+	// Only a guest acts on it: an RPC that ran on the host itself (editor Python runs RPCs locally) must not send
+	// the host round ReturnToTitle again (that recursed until the stack overflowed)
+	const UWorld* World = GetWorld();
+	if (bReturningToTitle || !World || World->GetNetMode() != NM_Client)
+	{
+		return;
+	}
 	ReturnToTitle(LOCTEXT("HostLeft", "The host left the game."));
 }
 

@@ -5,6 +5,7 @@
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 #include "EchoFrontEndPlayerController.h"
+#include "EchoGameSession.h"
 #include "EchoNetDiagnostics.h"
 #include "EchoOnline.h"
 #include "EchoSessionSubsystem.h"
@@ -36,6 +37,7 @@ AEchoFrontEndGameMode::AEchoFrontEndGameMode()
 	PlayerControllerClass = AEchoFrontEndPlayerController::StaticClass();
 	PlayerStateClass = AEchoLobbyPlayerState::StaticClass();
 	DefaultPawnClass = nullptr;
+	GameSessionClass = AEchoGameSession::StaticClass();
 	// Non-seamless travel into the game: simple and works in Play-In-Editor
 	bUseSeamlessTravel = false;
 }

@@ -256,6 +256,7 @@ void UEchoSessionSubsystem::FindSessions()
 	FindHandle = Sessions->AddOnFindSessionsCompleteDelegate_Handle(FOnFindSessionsCompleteDelegate::CreateUObject(this, &UEchoSessionSubsystem::HandleFindComplete));
 
 	bSearching = true;
+	bSearchIsForCode = !SearchCode.IsEmpty();
 	Results.Reset();
 	if (!Sessions->FindSessions(0, Search.ToSharedRef()))
 	{
@@ -304,6 +305,13 @@ void UEchoSessionSubsystem::HandleFindComplete(bool bSuccess)
 		}
 	}
 
+	if (!SearchCode.IsEmpty() && !bSearchIsForCode)
+	{
+		// A code was typed while a list search was running: report the list, then search for the code
+		OnFindComplete.Broadcast(bSuccess, FText::GetEmpty());
+		FindSessions();
+		return;
+	}
 	if (!SearchCode.IsEmpty())
 	{
 		// A join by code: join the match, or say why not
@@ -346,7 +354,7 @@ void UEchoSessionSubsystem::JoinByCode(const FString& InCode)
 		OnJoinComplete.Broadcast(false, FText::Format(LOCTEXT("CodeLength", "Join codes are {0} letters and numbers."), FText::AsNumber(GetDefault<UEchoOnlineSettings>()->JoinCodeLength)));
 		return;
 	}
-	if (bSearching || bJoining)
+	if (bJoining)
 	{
 		return;
 	}
@@ -354,7 +362,11 @@ void UEchoSessionSubsystem::JoinByCode(const FString& InCode)
 	bJoining = true;
 	JoinSource = TEXT("code");
 	SearchCode = Code;
-	FindSessions();
+	if (!bSearching)
+	{
+		FindSessions();
+	}
+	// else: the list search that's running starts the code search when it finishes (HandleFindComplete)
 }
 
 void UEchoSessionSubsystem::JoinSession(int32 Index)

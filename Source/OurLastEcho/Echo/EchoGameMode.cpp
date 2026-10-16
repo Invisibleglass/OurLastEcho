@@ -8,6 +8,7 @@
 #include "TimerManager.h"
 #include "EchoGameInstance.h"
 #include "OurLastEchoCharacter.h"
+#include "EchoGameSession.h"
 #include "EchoHUD.h"
 #include "OurLastEcho.h"
 
@@ -21,6 +22,7 @@ AEchoGameMode::AEchoGameMode()
 {
 	GameStateClass = AEchoGameState::StaticClass();
 	HUDClass = AEchoHUD::StaticClass();
+	GameSessionClass = AEchoGameSession::StaticClass();
 }
 
 UClass* AEchoGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)

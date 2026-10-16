@@ -186,6 +186,8 @@ private:
 	TSharedPtr<FOnlineSessionSearch> Search;
 	TArray<FEchoSessionInfo> Results;
 	bool bSearching = false;
+	/** The running search looks for SearchCode (otherwise it's the LAN list) */
+	bool bSearchIsForCode = false;
 	bool bJoining = false;
 	FString SearchCode;
 	FString JoinSource;

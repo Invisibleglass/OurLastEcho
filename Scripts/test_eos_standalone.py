@@ -158,7 +158,8 @@ def wait_for(cond, timeout):
 
 
 def common_login():
-    ok = yield from wait_for(lambda: world() is not None and logged_in(), 90.0)
+    # The first sign-in of each account shows Epic's consent screen in the game (overlay): someone clicks Allow
+    ok = yield from wait_for(lambda: world() is not None and logged_in(), 300.0)
     l = login()
     check(ok, f"signed in with an Epic account ({l.get_display_name() if l else '?'}, service {lib.get_online_service(world()) if world() else '?'})")
     if not ok and l:

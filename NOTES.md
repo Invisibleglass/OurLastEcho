@@ -1,4 +1,100 @@
-# Milestone 6 – Two eras: one skeleton, two skins
+# Milestone 7 – Real online play with Epic Online Services
+
+Branch: `milestone-7-online`, branched from `main` (Milestone 6 was merged). Nothing was pushed.
+
+**In short:** the game now signs players in with their Epic accounts and plays over the internet through Epic Online Services (EOS). Friends join with an invite or a short join code, talk with voice chat, and connect peer to peer through EOS's relay, so nobody opens router ports. LAN (Online Subsystem Null) still works as a fallback.
+
+## Setup (one time)
+
+- **EOS IDs and the client secret** live in `Config/Windows/WindowsEngine.ini`, which git ignores; the repo is public. A blank copy for sharing is `Config/EOSCredentials.example.ini`. They are packaged with the game, as Epic expects for game clients.
+- **Developer Portal** (product "Our Last Echo", organization Invisibleglass Productions):
+  - client "Test of online" with the Peer2Peer client policy (sessions, lobbies, voice, P2P)
+  - Epic Account Services: permissions Basic Profile, Online Presence and Friends; the client linked
+  - Brand settings aren't done, so the app is in **Draft**: players see an "unreviewed" notice at sign-in, and only accounts in the organization can sign in. **Add testers' Epic accounts under Organization > Team members.**
+  - The product has only the **Live** sandbox, which the IDs point to.
+- **Windows Smart App Control must be off** on any PC that runs the editor or a build: it blocks every freshly built, unsigned game DLL or EXE ("Bad Image", error 0xc0e90002). It was turned off on this PC on 2026-10-16.
+
+## The switch: EOS or LAN
+
+- **One setting:** `[OnlineSubsystem] DefaultPlatformService` in `Config/DefaultEngine.ini`: `EOS` (default) or `Null` (LAN, no login, no voice).
+- **A game process can override it:** `-ini:Engine:[OnlineSubsystem]:DefaultPlatformService=Null` (the LAN test does this).
+- **Play-In-Editor uses `PIEOnlineService`** in `Config/DefaultGame.ini` (default `Null`).
+  - PIE connects its windows by IP, which EOS's peer-to-peer sessions can't use, and every PIE window would need its own Epic login.
+  - So the editor tests run on LAN, and EOS is tested with real game processes or a packaged build.
+- **Connections:** the game net driver is EOS's `NetDriverEOS`.
+  - EOS games listen peer to peer: the connect address is the host's EOS user ID, relayed by EOS when a direct route fails.
+  - LAN games add `?bUseIPSockets` to the listen URL, and the driver falls back to plain IP.
+  - The editor keeps the engine's IP driver.
+
+## What was built
+
+All of it is in C++ under `Source/OurLastEcho/Echo/Online/` plus changes to the session and menu code.
+
+- **Login** (`UEchoLoginSubsystem`, `UEchoLoginScreen`):
+  - It's the first screen of a run: "Signing in with your Epic account...", then the main menu ("Signed in as <name> (Epic account)").
+  - The first time, the Epic account portal opens (the overlay or a browser). After that the login is remembered (`bPreferPersistentAuth`).
+  - On failure: a plain-language reason (no internet, cancelled, setup incomplete, not in the organization, Dev Auth Tool not running), **Try Again** and Quit.
+  - LAN mode signs in instantly as the computer's name.
+- **Hosting** creates an EOS lobby session: 2 players, presence on, invites on, a voice room, and a 6-character **join code** from letters and digits that are easy to read aloud (no 0/O or 1/I/L). The lobby shows "Join code: K7Q2MD" to the host.
+  - *Private, simplest version (noted as the brief asks):* the lobby is advertised, because EOS can only search advertised lobbies and the code search needs that. But no screen ever lists internet games, so in practice only someone with the code or an invite gets in.
+  - A fixed bucket ID (`OurLastEcho`) means editor-launched and packaged builds find each other.
+- **Invites:**
+  - **Invite Friend** opens the Epic friends overlay. OSS EOS has no "invite dialog" (`ShowInviteUI` isn't implemented), but its friends overlay invites to the current presence lobby.
+  - **Invite from Friends List** is an in-game list of Epic friends (online first) with one-click invites, for when the overlay isn't available.
+  - **Accepting** an invite in the overlay joins the host's lobby straight away, from anywhere in the game.
+  - An invite that arrives in game, without the overlay, shows "<name> invited you. Join?" on the main menu.
+  - *While the game is closed:* invites wait in the Epic overlay (Shift+F3) and can be accepted after starting the game. A build outside the Epic Games Store can't be *launched* by an invite; only the store's launcher does that.
+- **Join by code:** Play > Join Game has a code box (any case; spaces and dashes are ignored) and **Join with Code**. LAN mode also lists the games on the network, as before.
+  - Clear messages for a wrong code, a full game, an expired invite, a host that doesn't answer (20 s), and a lost connection.
+  - **Cancel** on "Joining..." gives up at any point.
+- **Voice chat** (`UEchoVoiceSubsystem`): EOS voice through the lobby's voice room, which both players join with the session automatically. It lasts through the lobby and the game.
+  - Settings > Audio: **Microphone** on/off, **Voice mode** (Open mic / Push-to-talk), **Push-to-talk key** (default V, rebindable; gamepad: left stick click), **Voice chat volume** (under the master volume).
+  - Push-to-talk reads raw key events (a Slate input pre-processor), so it works in menus and in game and never eats the key.
+  - **Speaking indicator:** a blue "((( <name> is speaking" box bottom-left while the other player talks, and a red "Mic on" box while you hold push-to-talk.
+- **Disconnects:**
+  - **Guest leaves or drops mid-game:** the host returns to *their lobby*. The session and join code stay, so the friend can rejoin with the same code. The host sees "Saraa left the game."
+  - **Host leaves:** the host tells the guest first, and the guest goes to the title screen with "The host left the game." A host that drops without warning gives the guest the same message, or "Lost the connection to the host" after a timeout.
+  - **Different builds:** "You and the host have different versions of the game."
+  - **Never stuck on black:** the era fade-in gives up waiting after 20 s (`MaxBlackScreenSeconds`) and shows the game anyway.
+  - Every failed join ends on a message with OK and the menus behind it.
+- **Diagnostics** (`UEchoNetDiagnostics`, `UEchoOnlineOverlay`):
+  - **Network overlay**, top right: transport (EOS P2P / IP), ping, packet loss in/out, KB/s in/out. Toggle it in Settings > Graphics > Network stats overlay, or with the console command `EchoNetStats`.
+  - **Session log** per run: `Saved/Logs/OnlineSessions/Online-<date-time>.log`. It records sign-in, hosting with the code, joins, invites, lobby arrivals and departures, map changes, connects and disconnects, network failures, voice room changes, and a network sample every 10 s (ping, loss, bandwidth, memory).
+  - `EchoLogNote <text>` marks a moment in the log.
+  - The EOS SDK's own start-up messages print the product IDs, so only its warnings and errors are logged (`[Core.Log] LogEOSSDK=Warning`).
+- **Console commands added:** `EchoJoinCode <code>`, `EchoNetStats`, `EchoLogNote <text>`. `EchoHost`, `EchoReady` and the rest still work.
+
+## Two Epic accounts on one PC (Developer Authentication Tool)
+
+1. **Get the tool:** it ships with the EOS SDK (portal > SDK download). It's unzipped at `D:\EOS_SDK\DevAuthTool\EOS_DevAuthTool.exe`.
+2. **Start it:** run the tool, set the **Port** to `6300`, and click **Start**.
+3. **Log in twice:** sign in with the first Epic account and the second; here the credentials are named `Default` and `Default2` (the test script's defaults; pass `-HostCredential`/`-GuestCredential` for other names). Both accounts must be in the portal organization, and should be Epic friends to test invites.
+4. **Run the game with a credential:** add `-EchoDevAuth=Default` (or `Default2`) to its command line. It signs in through the tool instead of the account portal; the tool's address is `DevAuthHost` in DefaultGame.ini.
+5. **Run the two-player test:** `powershell -File Scripts/run_eos_test.ps1` (editor closed) starts both games and plays a full round. Add `-NetEmu average` or `-NetEmu bad` to add lag and packet loss.
+
+## Packaged build and playing from another PC
+
+**Build it** (editor closed):
+```
+powershell -File Scripts/package_game.ps1
+```
+It makes `Packaged/Windows/` (the game, with `Play Our Last Echo.exe` and `READ ME FIRST.txt`) and `Packaged/OurLastEcho-Win64.zip`. `Packaged/` is git-ignored.
+- `Play Our Last Echo.exe` is the **EOS Bootstrapper**: it makes sure Epic Online Services, which the overlay needs, is installed, then starts `OurLastEcho.exe`.
+- The build includes Microsoft's runtime installer (prerequisites).
+
+**Send it:**
+- Upload the zip to Google Drive, OneDrive or Dropbox and share the link. It's too big for most email or chat attachments.
+- Before testing together, add your friend's Epic account to the portal organization, and become Epic friends.
+
+**Your friend, on their PC:**
+1. Download and **unzip the whole folder**; don't run it from inside the zip.
+2. Make sure Windows **Smart App Control is off** (Windows Security > App & browser control), or Windows blocks the game.
+3. Run `Play Our Last Echo.exe`. If SmartScreen warns, click More info > Run anyway: the test build isn't signed.
+4. Sign in with their Epic account.
+5. Join you: accept your invite (Epic overlay, Shift+F3), or choose Play > Join Game, type your join code, and press **Join with Code**.
+
+**Then** follow `MANUAL_TEST.md` together. Afterwards, swap the session logs (`OurLastEcho\Saved\Logs\OnlineSessions`).
+# Milestone 6 â€“ Two eras: one skeleton, two skins
 
 Branch: `milestone-6-two-eras`, branched from `main` (Milestone 5 was merged). Nothing was pushed. Built with the editor open, driven through its MCP server.
 
@@ -53,7 +149,7 @@ Branch: `milestone-6-two-eras`, branched from `main` (Milestone 5 was merged). N
 
 ## Build order
 
-`build_canyon.py` → `build_climb.py` → `build_crossing.py` → `build_canyon_rocks.py` → **`build_eras.py` last**:
+`build_canyon.py` â†’ `build_climb.py` â†’ `build_crossing.py` â†’ `build_canyon_rocks.py` â†’ **`build_eras.py` last**:
 - **Why last:** the earlier builders respawn visible shared geometry, and `build_canyon.py` respawns a shared post-process volume. `build_eras.py` then copies the shapes into the eras, hides them, and moves the lighting out.
 - **Rebuilds:** it rebuilds both era levels from scratch and is safe to re-run. **Re-run it after changing the canyon or any rock piece**, or the eras will draw the old shapes (the eras test catches this).
 
@@ -99,7 +195,7 @@ Branch: `milestone-6-two-eras`, branched from `main` (Milestone 5 was merged). N
 | Both views on the past | 46.0 fps |
 | One machine loading both eras | 44.6 fps (about 0.7 ms per frame for an extra era) |
 
-- **Memory:** an extra era layer added only about 3–10 MB, because the eras are instanced basic shapes.
+- **Memory:** an extra era layer added only about 3â€“10 MB, because the eras are instanced basic shapes.
 - **What that means:** the eras cost about the same, and only one is ever loaded per machine. Real art will change these numbers; measure again once it arrives.
 
 Details are in TEST_REPORT.md.
@@ -124,7 +220,7 @@ Details are in TEST_REPORT.md.
 
 ---
 
-# Milestone 5 – Title screen, menus, hosting and settings
+# Milestone 5 â€“ Title screen, menus, hosting and settings
 
 Branch: `milestone-5-title-screen`, branched from `milestone-4-sword-whip` (Milestone 4 isn't merged into `main` yet, as asked). Nothing was pushed. Built with the editor open, driven through its MCP server.
 
@@ -181,7 +277,7 @@ Where the brief offered a choice, I picked the simplest option. Each choice is n
 
 **4. Settings** (four tabs; switch with the tab buttons, LB/RB or Q/E):
 - **Graphics:**
-  - Window mode, resolution (the monitor's supported list), quality preset (Low–Epic).
+  - Window mode, resolution (the monitor's supported list), quality preset (Lowâ€“Epic).
   - V-sync and frame rate cap (30/60/120/144/unlimited).
   - Brightness (applied as display gamma).
 - **Audio:** master, music, effects, dialogue and voice chat volumes, plus a microphone toggle.
@@ -241,7 +337,7 @@ Where the brief offered a choice, I picked the simplest option. Each choice is n
 **Automated (editor open):**
 - `Scripts/tools/run_frontend_test.ps1 -Mode title` (1 player, 52 checks, ~20 s): the scene, the menus by keyboard, gamepad and mouse, Credits, Quit, and every settings tab, including Apply / Discard / Reset, saving and reloading.
 - `Scripts/tools/run_frontend_test.ps1 -Mode online` (2 players, 32 checks, ~100 s): host, join, lobby, ready, start, the in-game menu not pausing, each player leaving, a closed game, and an empty list.
-- `Scripts/tools/run_gameplay_test.ps1 -Script test_climb_live.py -Marker ECHO_CLIMB_TEST` (and the same for the other Milestone 1–4 tests) runs a gameplay suite in a fresh session.
+- `Scripts/tools/run_gameplay_test.ps1 -Script test_climb_live.py -Marker ECHO_CLIMB_TEST` (and the same for the other Milestone 1â€“4 tests) runs a gameplay suite in a fresh session.
 
 **Rebuilding the title map:** `build_title_screen.py`, in the open editor. It opens TitleScreen, rebuilds it from scratch (so hand edits to it are lost), then reopens Lvl_SpiritPath. It also (re)creates the audio classes, the CommonUI input data and the rebindable key names.
 
@@ -289,7 +385,7 @@ Details, and the bugs the tests caught, are in TEST_REPORT.md.
 
 ---
 
-# Milestone 4 – The sword whip and anchor arrows
+# Milestone 4 â€“ The sword whip and anchor arrows
 
 Branch: `milestone-4-sword-whip`, branched from `main` after Milestone 3 was merged. Built with the editor open, driven through its MCP server.
 
@@ -308,14 +404,14 @@ Branch: `milestone-4-sword-whip`, branched from `main` after Milestone 3 was mer
 - **Networking:** the anchor's position and surface replicate once, so both machines agree to the millimetre (tested).
 
 **The sword whip** (`UEchoSwordWhipComponent`, on every character; only a Spirit-realm character can use it):
-- **Targeting:** every frame, on Saraa's own machine. The nearest anchor within **whip range (18 m)**, within **40°** of the camera's view and in clear line of sight gets highlighted: the orb swells and brightens, and blue brackets appear around it on her screen.
+- **Targeting:** every frame, on Saraa's own machine. The nearest anchor within **whip range (18 m)**, within **40Â°** of the camera's view and in clear line of sight gets highlighted: the orb swells and brightens, and blue brackets appear around it on her screen.
 - **Latch:** hold the whip button: **left mouse / E / gamepad right trigger** (`IA_Whip` in `IMC_Whip`, from `Scripts/build_sword_whip.py`). The whip line lashes out to the anchor in 0.12 s, with a snap sound and a flash on both machines.
 - **Swing:** a pendulum under the anchor.
-  - Physics: gravity (×1.4) with the rope as a maximum length. A slack rope is free fall, and when it goes taut she keeps only her speed along the swing.
+  - Physics: gravity (Ã—1.4) with the rope as a maximum length. A slack rope is free fall, and when it goes taut she keeps only her speed along the swing.
   - Steering: a little air control from the move stick. She faces the way she swings.
   - Momentum is kept, capped at 16 m/s.
   - Walkable ground: touching it ends the swing. Walls: she scrapes along them.
-- **Release:** let go of the whip button, **or press jump**. She launches with her momentum plus a small forward and upward boost. Her speed isn't braked in the air until she lands (the template's 15 m/s² falling braking otherwise killed the launch).
+- **Release:** let go of the whip button, **or press jump**. She launches with her momentum plus a small forward and upward boost. Her speed isn't braked in the air until she lands (the template's 15 m/sÂ² falling braking otherwise killed the launch).
 - **Chain:** press the whip again mid-air to latch onto the next anchor. The anchor she just left can't be re-targeted for 0.5 s.
 - **Bat can't use it:** no mesh, no input, and his movement refuses to swing.
 - **Placeholder look:**
@@ -333,7 +429,7 @@ Result: **0 corrections** in every swing, including at 105 ms ping with 30 ms ji
 
 | | |
 |---|---|
-| **Chasm** | 71 m long, wall to wall, 14 m deep (stations 7850–15000). It's cut into the landscape by `build_canyon.py`, with a kill volume inside. |
+| **Chasm** | 71 m long, wall to wall, 14 m deep (stations 7850â€“15000). It's cut into the landscape by `build_canyon.py`, with a kill volume inside. |
 | **Swing 1** (single, teaches the basics) | From The Climb's ledge (7.4 m up), under target 1 on an overhang, to pillar 1. |
 | **Swing 2** (chained, teaches the 2-anchor limit) | From pillar 1, under targets 2 and 3 on the underside of a 22 m-deep rock arch, to pillar 2. Both anchors must exist before she jumps. One arch anchor alone can't reach pillar 2, however she times the release (checked by the test). The arch's rock "curtain" at its back edge blocks the big high flings a single anchor would need. |
 | **Swing 3** (new + old mechanics) | From pillar 2, under target 4 on another overhang, onto an **echo platform** Bat must wake. From it she steps up 90 cm through **her doorway** in a gate wall onto the far rim. |
@@ -348,8 +444,8 @@ Result: **0 corrections** in every swing, including at 105 ms ping with 30 ms ji
 - A **training dummy** (`AEchoTrainingDummy`) on the far rim takes the hit. The hit count is replicated, and both players see it wobble and hear it.
 
 **Tuning in Blueprint:**
-- **BP_Saraa → SwordWhip:** whip range, targeting angle, re-latch delay, max swing speed ("swing speed"), latch boost, gravity during swing, air control, min rope length, ground-latch hop, release boost (forward and up), lash range/radius/duration/cooldown, look and sounds.
-- **BP_ThirdPersonCharacter → SpiritBow:** `MaxActiveAnchors` and `AnchorClass`.
+- **BP_Saraa â†’ SwordWhip:** whip range, targeting angle, re-latch delay, max swing speed ("swing speed"), latch boost, gravity during swing, air control, min rope length, ground-latch hop, release boost (forward and up), lash range/radius/duration/cooldown, look and sounds.
+- **BP_ThirdPersonCharacter â†’ SpiritBow:** `MaxActiveAnchors` and `AnchorClass`.
 
 **Debug:** type **`EchoWhipDebug`** in the console. It draws:
 - the whip range sphere and targeting cone
@@ -384,7 +480,7 @@ It's per machine, and a line on screen says it's on.
   - `ECHO_CROSS_TRACE=True`
 - **Saraa as host:** type `Echo.HostPlaysSaraa 1` in the console before starting PIE, then use mode `host_saraa`. Set it back to 0 afterwards.
 - **Real swings:** on Saraa's own machine the test holds movement input, jumps, aims the camera, presses the whip, and lets go when the predicted landing is on the target, like a player. Every landing is checked on the server.
-- **Frame rate:** before running, turn off *Use Less CPU when in Background* (Editor Preferences → Performance, or the MCP `ObjectTools.set_properties` call in CLAUDE.md). It resets on every editor start. Otherwise a background editor runs at ~3 fps with two PIE worlds, and scripted input that coarse isn't meaningful.
+- **Frame rate:** before running, turn off *Use Less CPU when in Background* (Editor Preferences â†’ Performance, or the MCP `ObjectTools.set_properties` call in CLAUDE.md). It resets on every editor start. Otherwise a background editor runs at ~3 fps with two PIE worlds, and scripted input that coarse isn't meaningful.
 
 **Rebuilding** (resets hand edits to those actors):
 1. `build_sword_whip.py`: assets; can run headless.
@@ -409,7 +505,7 @@ It's per machine, and a line on screen says it's on.
 Editor and game builds: 0 warnings. Details are in TEST_REPORT.md.
 
 **Bugs and design problems the tests caught (all fixed):**
-1. **Swings drifted sideways off the pillars** in the first runs. The test steered along the canyon's centreline, but the left wall bends 12° away from it there. It now steers along Saraa's line, like a player.
+1. **Swings drifted sideways off the pillars** in the first runs. The test steered along the canyon's centreline, but the left wall bends 12Â° away from it there. It now steers along Saraa's line, like a player.
 2. **The arch's front rock curtain blocked Saraa's own view** of the first arch anchor from pillar 1, so her whip had nothing to latch onto. It was removed; the back curtain stays.
 3. **Target 3 sat right where the first arch swing tops out,** so the second swing had no arc. The arch was lengthened, target 3 moved 6 m on, pillar 2 moved back, and target 4 moved out.
 4. **Momentum was lost on release.** The template's falling braking cut her to walking speed in a fraction of a second. Flights from a swing are no longer braked.
@@ -421,13 +517,13 @@ Editor and game builds: 0 warnings. Details are in TEST_REPORT.md.
 
 - **Needs a manual check: real controls and feel.**
   - Whip input is verified: IA_Whip is on LMB, E and the right trigger, and the component binds it. Every path is driven through the same functions the bindings call.
-  - Nobody has pressed a real button yet. Worth feeling: the 40° targeting cone (anchors are high above, so she may need to look up; widen `TargetingAngle` if it's fiddly), swing speed, and release timing.
+  - Nobody has pressed a real button yet. Worth feeling: the 40Â° targeting cone (anchors are high above, so she may need to look up; widen `TargetingAngle` if it's fiddly), swing speed, and release timing.
 - **Needs a manual check: the lash from Saraa's client.** The lash is a server RPC from her machine, which editor Python can't send (same reason as Milestone 3's debug command). The test drives it on the server's copy of her, which covers the hit, replication and cooldown. Pressing the button in Saraa's window once confirms the RPC.
 - **How Saraa's swing looks on Bat's screen** hasn't been measured. It uses the engine's standard smoothing for other players' characters, which extrapolates in straight lines between updates. At high ping her arc may look slightly less round to Bat than to her.
-- **A perfect fling might skip the echo platform.** Her doorway's sill is 90 cm above the platform, so she'd have to fly into a 3 × 2.6 m window. Not seen in testing, but not impossible.
+- **A perfect fling might skip the echo platform.** Her doorway's sill is 90 cm above the platform, so she'd have to fly into a 3 Ã— 2.6 m window. Not seen in testing, but not impossible.
 - **The whip line can pass through the arch's back curtain** for a moment during the second arch swing. It's only a visual; nothing collides with the line.
 - **Arch targets can also be shot from the start area** (only target 4 and the echo platform need the shelf). A front curtain would fix it, but it blocked Saraa (see *Results*).
-- **Colours:** the whip line was toned down (glow 1.4 → 0.8) after a screenshot showed it near-white in the canyon's auto-exposure. It still reads very pale. Tune `MI_WhipLine` / `MI_SpiritAnchor` by eye.
+- **Colours:** the whip line was toned down (glow 1.4 â†’ 0.8) after a screenshot showed it near-white in the canyon's auto-exposure. It still reads very pale. Tune `MI_WhipLine` / `MI_SpiritAnchor` by eye.
 - **Per-player volume** (from Milestone 3) is still a to-do.
 - **Two editor settings reset on every start:** frame rate with the editor in the background (see *How to test*), and the Lumen warning shown in PIE windows.
 
@@ -441,7 +537,7 @@ Editor and game builds: 0 warnings. Details are in TEST_REPORT.md.
 - **Co-op communication:** a ping/marker, now more needed, since Bat has to tell Saraa where he's putting anchors and she can't see the targets.
 
 ---
-# Milestone 3 – The spirit bow and echo platforms
+# Milestone 3 â€“ The spirit bow and echo platforms
 
 Branch: `milestone-3-spirit-bow`, branched from `main` after Milestone 2 was merged. Built with the editor open, driving it through its MCP server.
 
@@ -450,7 +546,7 @@ Branch: `milestone-3-spirit-bow`, branched from `main` after Milestone 2 was mer
 ## What was built
 
 **The spirit bow** (`UEchoSpiritBowComponent`; every character has one, but only a Living-realm character can use it):
-- **Aim:** hold **right mouse / left trigger**. The camera pulls in over the shoulder (400 → 160 cm, FOV 70), a gold reticle appears, Bat faces where he aims, and he slows to 2.2 m/s.
+- **Aim:** hold **right mouse / left trigger**. The camera pulls in over the shoulder (400 â†’ 160 cm, FOV 70), a gold reticle appears, Bat faces where he aims, and he slows to 2.2 m/s.
 - **Fire:** **left mouse / right trigger** while aiming. The **server** spawns a replicated glowing arrow (`AEchoArrow`) with a point light and a tapering streak trail. It flies on a slight arc, and the launch angle is corrected for the arc so it lands where the reticle points. Unlimited arrows, 0.6 s cooldown.
 - **Saraa can't use it:** she gets no bow mesh, her input isn't bound and the server rejects her shots.
 - **Controls:** Enhanced Input assets `IA_Aim`, `IA_Fire` and `IMC_Bow`, made by `Scripts/build_spirit_bow.py`. The component adds `IMC_Bow` on top of the template's controls.
@@ -512,7 +608,7 @@ That's 60 `ECHO_CLIMB_TEST` checks, ending in `PASS`/`FAIL`, and it takes about 
 - The visual check in PIE showed Bat's over-the-shoulder aim, the reticle, the arrow's arc trail, the gold outlines behind the rock screen, and Saraa standing on a blue awake platform.
 
 **Bugs the tests caught (all fixed):**
-1. **Hops came out 5–6 m apart.** Platforms were spaced along the canyon centreline, and the curving wall stretched them. They're now placed by measured distance.
+1. **Hops came out 5â€“6 m apart.** Platforms were spaced along the canyon centreline, and the curving wall stretched them. They're now placed by measured distance.
 2. **A 59 cm step at the top of the ramp,** too high to walk up (the maximum is 45 cm). The ledge is a straight block on a curving wall, so its edge sat about 1 m past the ramp's hinge. The hinge is now placed on the block's actual face.
 3. **Colours washed out:** the bow looked white, the outline cream and the spirit platforms white. Linear colours are brighter than they look, and the canyon's auto-exposure clips glow. All were retuned. The Milestone 1 spirit platforms share the blue material and now read blue too.
 
@@ -537,7 +633,7 @@ That's 60 `ECHO_CLIMB_TEST` checks, ending in `PASS`/`FAIL`, and it takes about 
 - **Checkpoint polish:** a visible checkpoint marker, and checkpoints saved per player across sessions.
 
 ---
-# Milestone 2 – Testing the Spirit Path, and building the canyon
+# Milestone 2 â€“ Testing the Spirit Path, and building the canyon
 
 Branch: `milestone-2-canyon`. Built and tested live through the Unreal MCP server, with the editor open.
 
@@ -547,25 +643,25 @@ See **`TEST_REPORT.md`**. Every Milestone 1 item passed in a real 2-player liste
 
 ## What was built
 
-**Layout.** Coordinates are in cm. The Spirit Path runs along +X at Y = 0, from X = −1500 to 3600.
+**Layout.** Coordinates are in cm. The Spirit Path runs along +X at Y = 0, from X = âˆ’1500 to 3600.
 
 | | |
 |---|---|
-| Length | About 350 m. The canyon is closed by rock end caps **150 m before the start** (X = −16 500) and **150 m past the far side** (X = 18 600). |
-| Floor width | 37–52 m. Each wall is placed from control points, so the width varies. |
-| Wall height | 40–80 m, varying per side, plus ±5 m per segment. |
-| Bends | The canyon is straight around the play area and bends away at both ends, 55 m sideways toward −Y at the start and 65 m toward +Y at the far end, so you can't see out of either end. |
+| Length | About 350 m. The canyon is closed by rock end caps **150 m before the start** (X = âˆ’16 500) and **150 m past the far side** (X = 18 600). |
+| Floor width | 37â€“52 m. Each wall is placed from control points, so the width varies. |
+| Wall height | 40â€“80 m, varying per side, plus Â±5 m per segment. |
+| Bends | The canyon is straight around the play area and bends away at both ends, 55 m sideways toward âˆ’Y at the start and 65 m toward +Y at the far end, so you can't see out of either end. |
 | Ravine | Bat's pit now cuts **right across the canyon**, wall to wall, between X = 0 and 1600, so nobody can walk around the Spirit Path puzzle. Its floor is inside the Milestone 1 respawn volume. |
-| Overlook | A raised rock shelf 9 m up on the +Y wall, just past the end zone (X 30–44 m), reached by a 26 m ramp from the far side. It's the future vista point. |
+| Overlook | A raised rock shelf 9 m up on the +Y wall, just past the end zone (X 30â€“44 m), reached by a 26 m ramp from the far side. It's the future vista point. |
 
 **How it's built** (all in `Lvl_SpiritPath`; Milestone 1 actors weren't moved or resized):
-- **Landscape `CanyonFloor`:** 378 × 252 m, 1 m resolution, 24 components. It has a gentle rolling floor, a talus apron rising into each wall and rockfall slopes into the end caps. It's flattened to just under the Milestone 1 slabs. Python has no API for creating landscapes, so there's a small editor-only C++ helper, `UEchoEditorLibrary::CreateLandscapeFromHeights`, that does what Landscape mode's *New Landscape* does.
-- **Walls:** 251 engine cubes (`/Engine/BasicShapes/Cube`) stacked in 4–6 strata per 14 m segment. Each stratum is set back 1–6 m from the one below (terraces) and slightly rotated, so the walls read as layered sandstone rather than flat walls. On the outside of each bend, pieces are sized from the actual face line so they always overlap (see *Bugs found* below).
+- **Landscape `CanyonFloor`:** 378 Ã— 252 m, 1 m resolution, 24 components. It has a gentle rolling floor, a talus apron rising into each wall and rockfall slopes into the end caps. It's flattened to just under the Milestone 1 slabs. Python has no API for creating landscapes, so there's a small editor-only C++ helper, `UEchoEditorLibrary::CreateLandscapeFromHeights`, that does what Landscape mode's *New Landscape* does.
+- **Walls:** 251 engine cubes (`/Engine/BasicShapes/Cube`) stacked in 4â€“6 strata per 14 m segment. Each stratum is set back 1â€“6 m from the one below (terraces) and slightly rotated, so the walls read as layered sandstone rather than flat walls. On the outside of each bend, pieces are sized from the actual face line so they always overlap (see *Bugs found* below).
 - **Rocks (PCG):** `/Game/Echo/PCG/PCG_CanyonRocks` was built node by node through the MCP PCG toolset. It samples the landscape twice: dense large rocks on the talus at the wall bases, and sparse boulders on the open floor. It removes points inside `EchoRockExclusion` boxes (the Spirit Path and the overlook ramp), prunes overlaps and spawns about **440 instances** in 3 ISMs (LevelPrototyping ChamferCube, engine Sphere and Cone). The volume is set to **generate on demand only**: the result is saved in the level and never regenerates at runtime, so both players get identical rocks. The rocks have `BlockAll` collision (solid for both realms).
 - **Materials:** `M_CanyonRock` is texture-free. Horizontal sedimentary bands come from world-space Z (wobbled by X/Y), with occasional thin dark bands and gradient-noise brightness variation. It works on scaled cubes and on the landscape without UVs. There are three instances: `MI_CanyonRock` (walls), `MI_CanyonGround` (landscape, sandier) and `MI_CanyonBoulder` (rocks, tighter bands).
 - **Boundaries:** `AEchoBoundaryVolume` (new C++) is an invisible box that blocks **only** `Pawn` and `SpiritPawn`, so cameras and traces pass through. There's a chain of them along each wall face, from below the ravine to 140 m up, plus one across each end. Their outlines only draw when selected.
-- **Kill volume:** a second `EchoRespawnVolume` (`CanyonKillVolume`), 400 × 260 m, under the whole canyon floor. The original Milestone 1 one only covers the ravine area. Anyone who falls through respawns at their start point.
-- **Lighting:** the Milestone 1 lights were retuned. The Sun is low (19°) and warm, from down-canyon, and rakes across the +Y wall. The atmosphere has more dust (Mie) and less blue (Rayleigh). The height fog is warmer and dustier. An unbound `CanyonPostProcess` adds slight desaturation, warm gain and a vignette.
+- **Kill volume:** a second `EchoRespawnVolume` (`CanyonKillVolume`), 400 Ã— 260 m, under the whole canyon floor. The original Milestone 1 one only covers the ravine area. Anyone who falls through respawns at their start point.
+- **Lighting:** the Milestone 1 lights were retuned. The Sun is low (19Â°) and warm, from down-canyon, and rakes across the +Y wall. The atmosphere has more dust (Mie) and less blue (Rayleigh). The height fog is warmer and dustier. An unbound `CanyonPostProcess` adds slight desaturation, warm gain and a vignette.
 
 **Scripts** (run in the **open editor**; see *How to test*):
 - `Scripts/build_canyon.py` builds the materials, landscape, walls, end caps, overlook, boundaries, kill volume and lighting. It deletes and rebuilds only actors tagged `CanyonBuilder`, and it's deterministic (fixed seed). It needs a rendering editor, because landscape edit layers merge on the GPU, so it won't work headless.
@@ -608,14 +704,14 @@ Then **stop PIE, start a fresh one** and run `test_pie_live.py` the same way (Mi
 - Both PIE windows were checked visually: warm ochre strata, dusty light, rocks at the wall bases, and "Milestone complete" on both screens.
 
 **Bugs the tests found (all fixed):**
-1. **A gap in the wall boundary on the outside of the far bend.** At rim height a player could have gone straight out at X ≈ 77 m. Wall pieces were spaced by centreline distance, but the face line on the outside of a curve is longer. They're now sized from the actual face-line chord (`face_chord` in `build_canyon.py`).
+1. **A gap in the wall boundary on the outside of the far bend.** At rim height a player could have gone straight out at X â‰ˆ 77 m. Wall pieces were spaced by centreline distance, but the face line on the outside of a curve is longer. They're now sized from the actual face-line chord (`face_chord` in `build_canyon.py`).
 2. **The PCG rocks had no collision.** The PCG spawner defaults to `NoCollision`, so players walked through them. They now use `BlockAll`.
 3. **2-player PIE ran out of video memory** with the canyon (the on-screen message was "Video memory has been exhausted", about 120 MB over budget on this 6 GB RTX 2060). Fixed with the editor-only Lumen setting above; see *Performance*.
 
 ## Performance
 
 - **What the canyon adds:** 1 landscape (24 components), 251 cube actors, about 440 rock instances in 3 ISMs, 56 invisible boundary boxes, 1 post-process volume. That's modest for UE5.
-- **Frame rate: couldn't be measured meaningfully from here.** The editor was always a background window while I drove it, and on this machine a background editor runs at about 7–8 fps even with the level empty of PIE and "Use Less CPU when in Background" turned off. Milestone 1 measured the same 8 fps before the canyon existed. So those numbers measure Windows/editor throttling, not the level. **Please check it yourself:** click into the PIE window and type `stat fps` (or `stat unit`) in the console. `Scripts/measure_fps.py` also works if the editor is focused.
+- **Frame rate: couldn't be measured meaningfully from here.** The editor was always a background window while I drove it, and on this machine a background editor runs at about 7â€“8 fps even with the level empty of PIE and "Use Less CPU when in Background" turned off. Milestone 1 measured the same 8 fps before the canyon existed. So those numbers measure Windows/editor throttling, not the level. **Please check it yourself:** click into the PIE window and type `stat fps` (or `stat unit`) in the console. `Scripts/measure_fps.py` also works if the editor is focused.
 - **GPU profile** (`ProfileGPU`, 2-player PIE, 2 views): no single canyon-related pass dominates. Shadow depths are about 1.5 ms and there are about 350k primitives per view. The largest costs are character skinning, hardware-ray-traced skinned-mesh updates and Lumen's radiance cache, all of which Milestone 1 already had. Absolute timings were inflated because the GPU was downclocked in the background.
 - **Video memory:** 2-player PIE renders two separate worlds on one GPU, so every per-scene buffer (Lumen surface cache, virtual shadow maps, distance fields) exists twice. Halving the Lumen surface cache atlas in the editor only freed about 500 MB and removed the warning, with no visible difference. A packaged game renders one world per machine and keeps the default.
 
@@ -624,11 +720,11 @@ Then **stop PIE, start a fresh one** and run `test_pie_live.py` the same way (Mi
 - **The frame rate hasn't been measured with the editor focused.** See above; this needs a quick manual check.
 - **Re-running `build_spirit_path.py` (Milestone 1)** respawns the Sun, sky and fog with their old settings. Run `build_canyon.py` afterwards to re-apply the canyon lighting.
 - **The editor viewport looks brighter and more washed out than PIE,** because of auto-exposure and the editor view. Judge the look in PIE.
-- **The boundary sits up to about 0.6 m off the ideal face line,** and players are stopped 1–2 m from the rock on some stretches. It works, but the invisible wall might be noticeable against the rock. A future pass could use per-segment walls that follow the rocks more tightly.
+- **The boundary sits up to about 0.6 m off the ideal face line,** and players are stopped 1â€“2 m from the rock on some stretches. It works, but the invisible wall might be noticeable against the rock. A future pass could use per-segment walls that follow the rocks more tightly.
 - **The landscape has no paint layers:** it uses one material and one colour variation. Hand-sculpting works, but `build_canyon.py` would overwrite it.
 - **After regenerating rocks,** the editor viewport briefly showed faint "ghost" circles where old rocks were (stale lighting cache). They weren't visible in PIE.
 - **Closing the editor through MCP hangs:** `QUIT_EDITOR` typed via the MCP server leaves the editor stuck in "Preparing to exit", because the MCP call never returns. Everything was saved, so ending the process was safe. It's better to close the editor by hand.
-- **Startup shows an "Asset Manager … GameFeatureData" load error.** It comes from the MCP `AllToolsets` plugin and is harmless.
+- **Startup shows an "Asset Manager â€¦ GameFeatureData" load error.** It comes from the MCP `AllToolsets` plugin and is harmless.
 
 ## Suggestions for Milestone 3
 
@@ -640,7 +736,7 @@ Then **stop PIE, start a fresh one** and run `test_pie_live.py` the same way (Mi
 - **The next area:** turn one end cap into a narrow passage or collapsed slot canyon leading to the next level section. The builder already supports moving the ends.
 
 ---
-# Milestone 1 – "The Spirit Path" greybox
+# Milestone 1 â€“ "The Spirit Path" greybox
 
 ## What was built
 
@@ -694,12 +790,12 @@ Then **stop PIE, start a fresh one** and run `test_pie_live.py` the same way (Mi
 
 | Item | Status |
 |---|---|
-| Compiles with no errors | ✅ Clean build, no warnings |
-| PIE, 2 players, Listen Server | ⚠️ Set as the default. A real listen server + client connected and got the right characters headless, but it hasn't been played in the editor yet |
-| Saraa crosses on spirit platforms; Bat falls through | ✅ Verified in a game world by the automated test |
-| Bat can't see the platforms; Saraa can | ⚠️ Logic is in place; needs a visual check in PIE (headless runs don't render) |
-| Switch raises the bridge; Bat sees it rise | ✅ Raise verified by the test on the server; ⚠️ the client-side animation needs a visual check |
-| Both in end zone → "Milestone complete" | ✅ Game state verified by the test; ⚠️ the on-screen text needs a visual check |
+| Compiles with no errors | âœ… Clean build, no warnings |
+| PIE, 2 players, Listen Server | âš ï¸ Set as the default. A real listen server + client connected and got the right characters headless, but it hasn't been played in the editor yet |
+| Saraa crosses on spirit platforms; Bat falls through | âœ… Verified in a game world by the automated test |
+| Bat can't see the platforms; Saraa can | âš ï¸ Logic is in place; needs a visual check in PIE (headless runs don't render) |
+| Switch raises the bridge; Bat sees it rise | âœ… Raise verified by the test on the server; âš ï¸ the client-side animation needs a visual check |
+| Both in end zone â†’ "Milestone complete" | âœ… Game state verified by the test; âš ï¸ the on-screen text needs a visual check |
 
 ## What didn't work / caveats
 
