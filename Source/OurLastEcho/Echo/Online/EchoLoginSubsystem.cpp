@@ -69,7 +69,8 @@ void UEchoLoginSubsystem::Login()
 
 	// Two accounts on one PC: -EchoDevAuth=<credential name in the Developer Authentication Tool>
 	FString DevAuthCredential;
-	if (FParse::Value(FCommandLine::Get(), TEXT("EchoDevAuth="), DevAuthCredential) && !DevAuthCredential.IsEmpty())
+	bDevAuth = FParse::Value(FCommandLine::Get(), TEXT("EchoDevAuth="), DevAuthCredential) && !DevAuthCredential.IsEmpty();
+	if (bDevAuth)
 	{
 		UEchoNetDiagnostics::Log(this, FString::Printf(TEXT("Login: Epic account through the Developer Authentication Tool (credential %s)"), *DevAuthCredential));
 		Identity->Login(0, FOnlineAccountCredentials(TEXT("developer"), GetDefault<UEchoOnlineSettings>()->DevAuthHost, DevAuthCredential));
@@ -99,7 +100,11 @@ void UEchoLoginSubsystem::HandleLoginComplete(int32 LocalUserNum, bool bWasSucce
 	{
 		UE_LOG(LogOurLastEcho, Warning, TEXT("Login: failed (%s)"), *Error);
 	}
-	Finish(bWasSuccessful, bWasSuccessful ? FText::GetEmpty() : DescribeError(Error));
+	// Through the Developer Authentication Tool, "no connection" means the tool isn't running, not the internet
+	const FText Reason = bDevAuth && Error.Contains(TEXT("NoConnection"))
+		? LOCTEXT("DevAuthDown", "Couldn't reach the Developer Authentication Tool. Is it running, started on its port, and logged in?")
+		: DescribeError(Error);
+	Finish(bWasSuccessful, bWasSuccessful ? FText::GetEmpty() : Reason);
 }
 
 void UEchoLoginSubsystem::Finish(bool bSuccess, const FText& Error)

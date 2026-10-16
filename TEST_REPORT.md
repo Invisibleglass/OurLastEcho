@@ -295,3 +295,37 @@ Editor process memory rose only a few MB (4,419 → about 4,422–4,430 MB) when
 
 - **Era levels can't be inspected like the shared level in PIE:** tests reach them through `AEchoEraDirector.get_era_actors(era)`. Python names: the material library is `unreal.MaterialLibrary`; `AActor::IsHidden` is read as `get_editor_property("hidden")`.
 - **The sapling climb test steers at each branch and lets go over it**, like a player. Holding forward carried Bat straight over a 110 cm-wide branch.
+
+## Milestone 7: baseline before starting, then results (in progress)
+
+Tested on 2026-10-16 on branch `milestone-7-online`.
+
+**Baseline on `main` (Milestone 6 merged), before any changes:** Milestone 1 PASS, The Climb 60/60, The Crossing 67/67 (0 corrections), Eras 38/38.
+
+### Results so far
+
+| Test | How | Result |
+|---|---|---|
+| Builds | Editor and Game targets | ✅ 0 errors, 0 warnings |
+| Two accounts over real EOS | `run_eos_test.ps1`, two game processes, Dev Auth credentials Default/Default2 (accounts Invisibleglass / Invisibleglass2) | ✅ PASS / PASS, 18 + 15 checks. Epic sign-in on both; the host's lobby gets a 6-character join code; a wrong code says "No game with the code ZZZZZZ"; the right code (typed in lower case) joins; Ready + Start takes both into the level as Bat (present) and Saraa (past); **EOS P2P** transport, ping 147–198 ms (one PC talking to itself through Epic's relay); both in the voice room; host leaves, and the guest is sent to the title with "The host left the game." |
+| LAN fallback, two game processes | `run_lan_test.ps1` (forces Null) | ✅ PASS / PASS, and no EOS sign-in attempts |
+| Online menus in PIE (LAN) | `run_frontend_test.ps1 -Mode online` | ✅ 38/38, including: the guest leaves, the host returns to their lobby with "Saraa left the game." and the same code; a wrong code is refused; the guest rejoins with the code; the host leaves, the guest is told; nobody stays in the session. 0 EOS sign-in attempts. |
+| Title and settings in PIE | `run_frontend_test.ps1 -Mode title` | ✅ 52/52 |
+| Gameplay regressions in PIE | Milestone 1, The Crossing, Eras | ✅ PASS, 67/67, 38/38 |
+| Packaged build | `package_game.ps1` | ✅ Builds, 543 MB zip. Starts, loads EOS with the product's IDs, shows the login screen and handles a failed sign-in with a message and Try Again. |
+
+### Bugs found and fixed during testing
+
+1. **Editor crash when the host left.** The host's own call telling the guest to leave ran on the host, which sent the host back into ReturnToTitle again until the stack overflowed. ReturnToTitle can't re-enter itself any more, and only a guest acts on "return to main menu".
+2. **Stuck on "Joining..." on LAN.** A code typed within 3 s of opening the Join screen (while the network list search ran) never searched. It now searches as soon as the list search finishes.
+3. **A browser tab with the Epic sign-in page every time a LAN or editor lobby opened.** The engine's game session auto-logs in to the default service, EOS. `AEchoGameSession` skips that; the game's own login screen signs in.
+4. **The guest was left behind on Start Game over EOS.** The hard travel closed the peer-to-peer connection and EOS refused the reconnect. Online games now use seamless travel, and Bat is chosen as the listen server's local player rather than by arrival order.
+5. **The cook failed** on a missing GameFeatureData asset manager rule (engine plugins), which was added.
+6. **Misleading sign-in message** when the Dev Auth Tool isn't running. It now names the tool.
+7. **The EOS SDK printed the product's IDs in the log at start-up.** Its logging is limited to warnings and errors.
+
+### Not yet run (waiting for the user's go)
+
+- EOS with network emulation, average and bad: `run_eos_test.ps1 -NetEmu average|bad`
+- The 30-minute soak (disconnects, drift, ping, memory): `run_eos_test.ps1 -SoakMinutes 30`
+- Swapped roles over EOS, and a real test on two PCs on different internet connections, with a friend (`MANUAL_TEST.md`)

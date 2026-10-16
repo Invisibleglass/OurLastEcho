@@ -73,6 +73,8 @@ private:
 	FText ErrorText;
 	FString DisplayName;
 	bool bEpic = false;
+	/** Signing in through the Developer Authentication Tool (-EchoDevAuth=) */
+	bool bDevAuth = false;
 	double StartedAt = 0.0;
 
 	FDelegateHandle LoginHandle;

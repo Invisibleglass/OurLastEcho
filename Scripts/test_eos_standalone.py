@@ -1,6 +1,6 @@
 """
 Milestone 7: two real game processes on one PC play online through Epic Online Services, signed in as two Epic
-accounts with the EOS Developer Authentication Tool (credentials "Bat" and "Saraa", see NOTES.md).
+accounts with the EOS Developer Authentication Tool (two credentials, see NOTES.md).
 Run by Scripts/run_eos_test.ps1 (editor closed), which sets ECHO_EOS_ROLE ("host" / "guest") and ECHO_EOS_DIR
 (a folder both processes share, for handing over the join code).
 
@@ -9,20 +9,30 @@ EOS peer-to-peer transport, the voice room), then leaves for the title screen.
 Guest: signs in, first tries a wrong code (must fail with a message and stay on the Join screen), joins with the
 host's code through the Join screen, readies, checks the game (Saraa, the past, EOS transport, voice room), and
 then must be sent back to the title screen with "The host left the game." when the host leaves.
+Soak (ECHO_EOS_SOAK = minutes > 0): before the host leaves, the two stay in the game that long. Each minute Saraa
+walks and jumps for 25 s (predicted movement on her client), then both stand still and record where Saraa is: on
+her own screen and on Bat's. The host then reports the drift between the two views, the ping over time, and that
+nobody was disconnected. (Memory over time is in each run's online session log.)
 Output lines are tagged ECHO_EOS (host) / ECHO_EOS_GUEST; each process ends with PASS or FAIL (n failures).
 """
+import json
+import math
 import os
+import random
+import time
 import unreal
 
 ROLE = globals().get("ECHO_EOS_ROLE", "host")
 SHARED = globals().get("ECHO_EOS_DIR", "")
+SOAK_MINUTES = float(globals().get("ECHO_EOS_SOAK", 0))
 TAG = "ECHO_EOS" if ROLE == "host" else "ECHO_EOS_GUEST"
 gs = unreal.GameplayStatics
 lib = unreal.EchoUITestLibrary
-T = {"failures": 0, "wait": 0.0, "handle": None, "gen": None}
+T = {"failures": 0, "wait": 0.0, "handle": None, "gen": None, "walk": None, "jump_at": 0.0}
 MAPS = ("/Game/Echo/Maps/Lvl_SpiritPath.Lvl_SpiritPath", "/Game/Echo/Maps/TitleScreen.TitleScreen")
 CODE_FILE = os.path.join(SHARED, "join_code.txt")
 GUEST_DONE = os.path.join(SHARED, "guest_checked.txt")
+SOAK_LOG = os.path.join(SHARED, "soak_{}.jsonl")
 
 
 def log(msg):
@@ -181,6 +191,73 @@ def in_game_checks(role_realm, era):
     check(ok, f"in the voice room ({voice_status()})")
 
 
+def saraa_location():
+    """Where Saraa is in this process's world (her own pawn for the guest, Bat's view of her for the host)"""
+    w = world()
+    for p in (gs.get_all_actors_of_class(w, unreal.OurLastEchoCharacter) if w else []):
+        if p.get_realm() == unreal.EchoRealm.SPIRIT:
+            return p.get_actor_location()
+    return None
+
+
+def soak():
+    """Both roles: SOAK_MINUTES of play. Cycles on the wall clock so both processes stay in step"""
+    end = time.time() + SOAK_MINUTES * 60.0
+    recorded = -1
+    pings = []
+    drops = 0
+    while time.time() < end:
+        second = time.time() % 60.0
+        minute = int(time.time() // 60.0)
+        if map_name() != "Lvl_SpiritPath" or len(players()) != 2:
+            drops += 1
+            check(False, f"still in the game together during the soak ({map_name()}, {len(players())} players)")
+            return
+        if ROLE == "guest":
+            # Walk somewhere new for 25 s each minute, with a jump now and then; stand still for the rest
+            if second < 25.0:
+                if T["walk"] is None:
+                    angle = random.uniform(0.0, 2.0 * math.pi)
+                    T["walk"] = unreal.Vector(math.cos(angle), math.sin(angle), 0.0)
+            else:
+                T["walk"] = None
+        if 45.0 <= second < 50.0 and recorded != minute:
+            recorded = minute
+            loc = saraa_location()
+            s = stats()
+            pings.append(s.ping_ms if s and s.connected else -1)
+            with open(SOAK_LOG.format(ROLE), "a") as f:
+                f.write(json.dumps({"minute": minute, "loc": [loc.x, loc.y, loc.z] if loc else None,
+                                    "ping": pings[-1]}) + "\n")
+        yield 0.25
+    T["walk"] = None
+    valid = [p for p in pings if p >= 0]
+    log(f"soak: {SOAK_MINUTES:.0f} min, {len(pings)} samples, ping min/avg/max {min(valid):.0f}/{sum(valid)/len(valid):.0f}/{max(valid):.0f} ms" if valid else "soak: no ping samples")
+    check(drops == 0 and len(valid) == len(pings), f"no disconnects or lost connection during the {SOAK_MINUTES:.0f}-minute soak")
+
+
+def soak_report():
+    """Host, after the soak: Saraa's position on her own screen vs on Bat's, minute by minute (standing still)"""
+    yield 3.0
+    def load(role):
+        try:
+            with open(SOAK_LOG.format(role)) as f:
+                return {e["minute"]: e for e in (json.loads(l) for l in f if l.strip())}
+        except OSError:
+            return {}
+    host, guest = load("host"), load("guest")
+    gaps = []
+    for minute in sorted(set(host) & set(guest)):
+        a, b = host[minute]["loc"], guest[minute]["loc"]
+        if a and b:
+            gaps.append(math.dist(a, b))
+    if gaps:
+        log(f"soak drift (Saraa on Bat's screen vs her own, standing still): max {max(gaps):.1f} cm, avg {sum(gaps)/len(gaps):.1f} cm over {len(gaps)} minutes")
+        log(f"soak drift by minute: {', '.join(f'{g:.0f}' for g in gaps)}")
+    check(len(gaps) >= max(1, int(SOAK_MINUTES) - 2) and max(gaps or [9e9]) < 50.0,
+          f"the players agree where Saraa stands all through the soak (within 50 cm, {len(gaps)} samples)")
+
+
 def host():
     if not (yield from common_login()):
         return
@@ -207,8 +284,11 @@ def host():
     yield 1.0
     log(f"Start Game -> {queue_click('Start Game')}")
     yield from in_game_checks(unreal.EchoRealm.LIVING, "present")
+    if SOAK_MINUTES > 0:
+        yield from soak()
+        yield from soak_report()
 
-    ok = yield from wait_for(lambda: os.path.exists(GUEST_DONE), 90.0)
+    ok = yield from wait_for(lambda: os.path.exists(GUEST_DONE), 90.0 + SOAK_MINUTES * 60.0)
     check(ok, "the guest finished its in-game checks")
     yield 2.0
     log("host leaves the game (EchoLeave)")
@@ -255,6 +335,8 @@ def guest():
     yield 1.0
     log(f"Ready -> {queue_click('Ready')}")
     yield from in_game_checks(unreal.EchoRealm.SPIRIT, "past")
+    if SOAK_MINUTES > 0:
+        yield from soak()
     with open(GUEST_DONE, "w") as f:
         f.write("done")
 
@@ -272,6 +354,15 @@ def scenario():
 
 
 def on_tick(delta):
+    # Soak: Saraa's walking is input every frame, as a player's would be (it goes through her predicted movement)
+    if T["walk"] is not None:
+        w = world()
+        pawn = gs.get_player_pawn(w, 0) if w else None
+        if pawn:
+            pawn.add_movement_input(T["walk"], 1.0, False)
+            if time.time() > T["jump_at"]:
+                T["jump_at"] = time.time() + random.uniform(2.0, 5.0)
+                pawn.jump()
     if T["wait"] > 0:
         T["wait"] -= delta
         return

@@ -73,6 +73,17 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 - **Debug console commands** (`AOurLastEchoPlayerController`): `EchoSwapEra`, `EchoEra present|past|auto`, `EchoShowBothEras`.
 - **Stretch:** `AEchoSaplingSpot` (shared, replicated `bPlanted`). Saraa stepping on the mark plants it; a tree with 10 branch steps (blocks only `ECC_Pawn`) stands in the present, drawn per era.
 
+## Online with Epic Online Services (Milestone 7)
+
+- **The switch:** `[OnlineSubsystem] DefaultPlatformService` = `EOS` (default) or `Null` (LAN). Play-In-Editor uses `PIEOnlineService` (`UEchoOnlineSettings`, DefaultGame.ini; `Null`), so every PIE test runs on LAN. Our code gets the service with `EchoOnline::GetSubsystem(WorldContext)` (`Echo/Online/EchoOnline.h`), never `Online::GetSubsystem` directly.
+- **Credentials:** the EOS IDs and client secret are in the git-ignored `Config/Windows/WindowsEngine.ini` (template `Config/EOSCredentials.example.ini`). **The repo is public: never commit them, or print them in notes, chat or logs.** The EOS SDK's start-up messages print them, so `[Core.Log] LogEOSSDK=Warning`.
+- **Net driver:** `NetDriverEOS` (GameEngine only; the editor keeps IP). LAN listen URLs need `?bUseIPSockets`, otherwise the EOS driver listens peer to peer and IP clients can't connect.
+- **Travel:** online games use **seamless travel** from the lobby. A hard travel closes the P2P connection and EOS refuses the reconnect. Bat = the listen server's local player.
+- **Game session:** both game modes use `AEchoGameSession`, which skips the engine's auto-login to the default service. Without it, EOS opened a browser sign-in whenever a LAN or PIE lobby opened.
+- **Subsystems** (game instance): `UEchoLoginSubsystem` (login screen before the main menu; `-EchoDevAuth=<credential>` signs in through the Dev Auth Tool), `UEchoSessionSubsystem` (EOS lobby sessions, join codes, invites, friends list), `UEchoVoiceSubsystem` (lobby voice room, push-to-talk via an input pre-processor), `UEchoNetDiagnostics` (overlay + `Saved/Logs/OnlineSessions/` log). Python reaches them through `EchoUITestLibrary.get_sessions/get_login/get_voice/get_net_diagnostics`.
+- **Tests:** `Scripts/run_eos_test.ps1` (editor closed; Dev Auth Tool running on port 6300 with two credentials, by default `Default`/`Default2`; options `-NetEmu average|bad`, `-SoakMinutes N`). `Scripts/run_lan_test.ps1` forces Null. `Scripts/package_game.ps1` makes `Packaged/` (git-ignored) and its zip.
+- **Windows Smart App Control must be off.** It blocks freshly built unsigned DLLs ("Bad Image" 0xc0e90002; Code Integrity event 3033).
+- **The editor window must not be minimized** for `ue_cmd.ps1` / `ue_py.ps1`: the Slate snapshot skips minimized windows, and the console box isn't found.
 ## Engine & toolchain
 
 - **Unreal Engine 5.8.3**, installed at `D:\UE_5.8`. It's a registered (non-launcher) build: the `.uproject`'s `EngineAssociation` is a GUID that maps to that path via `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`.
