@@ -112,6 +112,13 @@ def face(pc, char, target_location):
     pc.set_control_rotation(unreal.Rotator(roll=0.0, pitch=math.degrees(math.atan2(d.z, math.hypot(d.x, d.y))), yaw=math.degrees(math.atan2(d.y, d.x))))
 
 
+def face_from_camera(pc, target_location):
+    """Puts the reticle on the target, like a player would (the aiming camera sits over the shoulder)"""
+    for _ in range(3):
+        d = target_location - pc.player_camera_manager.get_camera_location()
+        pc.set_control_rotation(unreal.Rotator(roll=0.0, pitch=math.degrees(math.atan2(d.z, math.hypot(d.x, d.y))), yaw=math.degrees(math.atan2(d.y, d.x))))
+
+
 def clear_enemies(server):
     for e in gs.get_all_actors_of_class(server, unreal.EchoEnemy):
         e.remove_quietly()
@@ -273,7 +280,14 @@ def bow_checks(server, bat_pc, bat_s, a_s):
     for kind, cmd, amount, wait in ((K.QUICK_SHOT, "quick", 10, 1.0), (K.AIMED_SHOT, "aimed", 20, 1.5), (K.CHARGED_SHOT, "charged", 45, 2.5)):
         face(bat_pc, bat_s, target.get_actor_location())
         before_shots, before_hp = bow.get_shot_count(kind), target.get_health().get_health()
+        if kind != K.QUICK_SHOT:
+            face_from_camera(bat_pc, target.get_actor_location())
         console(bat_pc, f"EchoShoot {cmd}")
+        if kind == K.CHARGED_SHOT:
+            # The camera moves over the shoulder while drawing: keep the reticle on the target until release
+            for _ in range(4):
+                yield 0.2
+                face_from_camera(bat_pc, target.get_actor_location())
         ok = yield from wait_for(lambda: bow.get_shot_count(kind) > before_shots and target.get_health().get_health() < before_hp - 0.5, wait + 1.0)
         check(ok and abs((before_hp - target.get_health().get_health()) - amount) < 0.5,
               f"Bat's {cmd} shot fires through Saraa and hits for {amount} (dealt {before_hp - target.get_health().get_health():.0f})")
@@ -461,9 +475,19 @@ def travel_scenario():
         door = doors[0]
         bat = character(server, LIVING)
         log(f"Bat walks into {door.get_actor_label()} ({door.get_editor_property('target_map')})")
-        bat.set_actor_location(door.get_actor_location() + unreal.Vector(0, 0, 150), False, True)
-        ok = yield from wait_for(lambda: worlds()[0] and worlds()[1] and worlds()[0].get_name() == arrive_map and worlds()[1].get_name() == arrive_map
-                                 and character(worlds()[0], LIVING) and character(worlds()[0], SPIRIT) and character(worlds()[1], SPIRIT), 40.0)
+        # Walk in for real: a door opened from inside Python (a teleport into its trigger) would run the guest's
+        # ClientTravel RPC on the host (editor Python runs RPCs locally), and the host would leave without the guest
+        fwd = door.get_actor_forward_vector()
+        bat.set_actor_location(door.get_actor_location() + fwd * 400 + unreal.Vector(0, 0, 100), False, True)
+        yield 0.5
+
+        def walk_and_arrived():
+            b = character(worlds()[0], LIVING) if worlds()[0] else None
+            if b and worlds()[0].get_name() == door_map:
+                b.add_movement_input(fwd * -1.0, 1.0, False)
+            return worlds()[0] and worlds()[1] and worlds()[0].get_name() == arrive_map and worlds()[1].get_name() == arrive_map \
+                and character(worlds()[0], LIVING) and character(worlds()[0], SPIRIT) and character(worlds()[1], SPIRIT)
+        ok = yield from wait_for(walk_and_arrived, 40.0, step=0.02)
         check(ok, f"the door takes BOTH players to {arrive_map}")
         if not ok:
             return
@@ -472,11 +496,12 @@ def travel_scenario():
         check(ok and director(server).is_era_loaded(unreal.EchoEra.PRESENT) and director(client).is_era_loaded(unreal.EchoEra.PAST)
               and not director(server).is_era_loaded(unreal.EchoEra.PAST) and not director(client).is_era_loaded(unreal.EchoEra.PRESENT),
               f"... with each player's own era loaded in {arrive_map}")
-        starts = {s.get_editor_property("player_start_tag"): s for s in gs.get_all_actors_of_class(server, unreal.PlayerStart)}
+        starts = {str(s.get_editor_property("player_start_tag")): s for s in gs.get_all_actors_of_class(server, unreal.PlayerStart)}
         bat, saraa = character(server, LIVING), character(server, SPIRIT)
         sb, ss = starts.get(f"{tag}_Bat"), starts.get(f"{tag}_Saraa")
-        near = sb and ss and (bat.get_actor_location() - sb.get_actor_location()).length() < 300 and (saraa.get_actor_location() - ss.get_actor_location()).length() < 300
-        check(bool(near), f"... arriving at the {tag} starts")
+        db = (bat.get_actor_location() - sb.get_actor_location()).length() if sb else -1
+        ds = (saraa.get_actor_location() - ss.get_actor_location()).length() if ss else -1
+        check(0 <= db < 300 and 0 <= ds < 300, f"... arriving at the {tag} starts (Bat {db:.0f} cm, Saraa {ds:.0f} cm away; starts {sorted(str(k) for k in starts)})")
         yield 1.0
 
 

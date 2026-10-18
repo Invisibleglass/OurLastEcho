@@ -94,7 +94,9 @@ bool AEchoGameMode::TravelBothTo(const FString& MapPath, FName InArrivalTag)
 		Url += FString::Printf(TEXT("?EchoArrive=%s"), *InArrivalTag.ToString());
 	}
 	UEchoNetDiagnostics::Log(this, FString::Printf(TEXT("Travel: both players to %s (%s)"), *Url, bUseSeamlessTravel ? TEXT("seamless") : TEXT("hard")));
-	GetWorld()->ServerTravel(Url, !bUseSeamlessTravel);
+	// Relative: a hard travel listens again on the same host port the guest reconnects to (absolute would reset it to
+	// the default 7777, but Play-In-Editor listens on 17777); the old URL options are replaced by the new ones
+	GetWorld()->ServerTravel(Url, false);
 	return true;
 }
 
@@ -219,10 +221,12 @@ void AEchoGameMode::Logout(AController* Exiting)
 
 	// The other player left an online game: the host goes back to their lobby (the session and its join code stay,
 	// so the friend can come back or someone else can join), and says why.
-	// (Not while the world is being torn down, e.g. the host leaving or Play-In-Editor stopping.)
+	// (Not while the world is being torn down, e.g. the host leaving or Play-In-Editor stopping; and not during a
+	// travel to another map: in a hard travel the guest disconnects on purpose, to reconnect to the new map.)
 	UWorld* World = GetWorld();
 	const APlayerController* Leaver = Cast<APlayerController>(Exiting);
-	if (!World || World->bIsTearingDown || !HasActorBegunPlay() || GetNetMode() != NM_ListenServer || !Leaver || Leaver->IsLocalController())
+	if (!World || World->bIsTearingDown || bTravelling || !World->NextURL.IsEmpty() || !HasActorBegunPlay() || GetNetMode() != NM_ListenServer
+		|| !Leaver || Leaver->IsLocalController())
 	{
 		return;
 	}
