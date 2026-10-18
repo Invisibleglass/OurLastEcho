@@ -13,7 +13,7 @@ ROLE = globals().get("ECHO_LAN_ROLE", "host")
 TAG = "ECHO_LAN" if ROLE == "host" else "ECHO_LAN_GUEST"
 gs = unreal.GameplayStatics
 T = {"failures": 0, "wait": 0.0, "elapsed": 0.0, "handle": None, "gen": None}
-MAPS = ("/Game/Echo/Maps/Lvl_SpiritPath.Lvl_SpiritPath", "/Game/Echo/Maps/TitleScreen.TitleScreen")
+MAPS = ("/Game/Echo/Maps/Lvl_SpiritPath.Lvl_SpiritPath", "/Game/Echo/Maps/CombatTest.CombatTest", "/Game/Echo/Maps/TitleScreen.TitleScreen")
 
 
 def log(msg):
@@ -117,6 +117,16 @@ def host():
     check(local_realm() == unreal.EchoRealm.LIVING, f"the host plays Bat ({local_realm()})")
     ok = yield from wait_for(lambda: shown_era() == "present", 20.0)
     check(ok, f"the host's game loaded only the present ({shown_era()})")
+
+    # Milestone 8: the Combat Test door's travel (EchoGoTo uses the same TravelBothTo), there and back. Queued for
+    # the next engine tick: from inside Python the guest's travel RPC would run on the host
+    for target, name in (("combat", "CombatTest"), ("back", "Lvl_SpiritPath")):
+        yield 4.0
+        unreal.EchoUITestLibrary.queue_console_command(gs.get_player_controller(world(), 0), f"EchoGoTo {target}")
+        ok = yield from wait_for(lambda: map_name() == name and len(players()) == 2 and local_realm() is not None, 60.0)
+        check(ok, f"EchoGoTo {target}: both players travel to {name} ({map_name()}, {len(players())} players)")
+        ok = yield from wait_for(lambda: shown_era() == "present", 20.0)
+        check(ok and local_realm() == unreal.EchoRealm.LIVING, f"... the host is still Bat, in the present ({shown_era()})")
     yield 8.0  # let the guest finish its checks before the host closes the game
 
 
@@ -142,6 +152,15 @@ def guest():
     check(local_realm() == unreal.EchoRealm.SPIRIT, f"the guest plays Saraa ({local_realm()})")
     ok = yield from wait_for(lambda: shown_era() == "past", 20.0)
     check(ok, f"the guest's game loaded only the past ({shown_era()})")
+
+    # Milestone 8: the host takes both players to the Combat Test and back
+    for name in ("CombatTest", "Lvl_SpiritPath"):
+        ok = yield from wait_for(lambda: map_name() == name and net_mode() == "client" and local_realm() is not None
+                                 and (name != "Lvl_SpiritPath" or T.get("was_in_combat")), 60.0)
+        T["was_in_combat"] = True
+        check(ok, f"the host's travel brings the guest to {name} ({map_name()}, {net_mode()})")
+        ok = yield from wait_for(lambda: shown_era() == "past", 20.0)
+        check(ok and local_realm() == unreal.EchoRealm.SPIRIT, f"... still Saraa, in the past ({shown_era()})")
     yield 12.0  # stay in the game while the host checks (the guest quitting sends the host back to the title)
 
 

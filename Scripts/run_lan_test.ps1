@@ -22,7 +22,7 @@ foreach ($Role in "host", "guest") {
           "`"-ExecCmds=scalability 0, py $Script`"", "-abslog=$Log"))
 }
 foreach ($Game in $Games) {
-    $Game | Wait-Process -Timeout 240 -ErrorAction SilentlyContinue
+    $Game | Wait-Process -Timeout 360 -ErrorAction SilentlyContinue
     if (-not $Game.HasExited) { Stop-Process $Game -Force; Write-Output "a game timed out" }
 }
 foreach ($Role in "host", "guest") {
