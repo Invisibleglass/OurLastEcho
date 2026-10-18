@@ -101,7 +101,8 @@ AEchoTravelDoor::AEchoTravelDoor()
 	Light->SetupAttachment(Root);
 	Light->SetRelativeLocation(FVector(120.0f, 0.0f, 220.0f));
 	Light->SetIntensityUnits(ELightUnits::Candelas);
-	Light->SetIntensity(60.0f);
+	// Gentle: the glowing portal also lights the area through Lumen, and the two together washed the floor out
+	Light->SetIntensity(25.0f);
 	Light->SetAttenuationRadius(900.0f);
 	Light->SetCastShadows(false);
 

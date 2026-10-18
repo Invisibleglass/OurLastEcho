@@ -240,7 +240,7 @@ Learned in Milestone 6:
 - PIE defaults to **2 players, Play As Listen Server** (`Config/DefaultEditorPerProjectUserSettings.ini`, also set in the user's own `Saved/` copy).
 - Template levels: `ThirdPerson/Lvl_ThirdPerson` and the `Variant_*` levels. These use World Partition / One File Per Actor (`Content/__ExternalActors__`); `Lvl_SpiritPath` does not.
 - Enabled plugins: StateTree, GameplayStateTree (used by the template AI), ModelingToolsEditorMode, PythonScriptPlugin, EditorScriptingUtilities, PCG, ModelContextProtocol, AllToolsets, and since Milestone 5 CommonUI, OnlineSubsystem, OnlineSubsystemNull, OnlineSubsystemUtils, Niagara, EngineCameras. There's no Starter Content in this engine install; use engine BasicShapes and `/Game/LevelPrototyping` meshes.
-- `Config/DefaultEngine.ini` `[SystemSettingsEditor]` halves Lumen's surface cache atlas **in the editor only**. 2-player PIE renders two worlds on one 6 GB GPU and ran out of video memory otherwise.
+- `Config/DefaultEngine.ini` `[SystemSettingsEditor]` halves Lumen's surface cache atlas **in the editor only**. 2-player PIE renders two worlds on one 6 GB GPU and ran out of video memory otherwise. It also halves the card texel density (`CardTexelDensityScale=50`): with the era copies the small atlas overflowed ("Lumen surface cache atlas oversubscribed") and those surfaces lit up milky white.
 
 ## Git
 

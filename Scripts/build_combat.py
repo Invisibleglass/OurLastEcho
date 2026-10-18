@@ -97,8 +97,8 @@ def build_materials():
         log(f"created {path}")
 
     glow = eal.load_asset("/Game/Echo/Materials/M_EchoGlow")
-    for name, rgb, amount in (("MI_DoorFrame", (0.2, 0.14, 0.1), 0.0), ("MI_DoorPortal", (1.0, 0.45, 0.1), 1.6),
-                              ("MI_RestartButton", (1.0, 0.12, 0.06), 1.4), ("MI_SpawnMarker", (0.6, 0.1, 0.1), 0.3)):
+    for name, rgb, amount in (("MI_DoorFrame", (0.2, 0.14, 0.1), 0.0), ("MI_DoorPortal", (1.0, 0.45, 0.1), 0.6),
+                              ("MI_RestartButton", (1.0, 0.12, 0.06), 0.8), ("MI_SpawnMarker", (0.6, 0.1, 0.1), 0.3)):
         mi = get_or_create(name, COMBAT_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
         mel.set_material_instance_parent(mi, glow)
         mel.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(*rgb, 1.0))
@@ -353,13 +353,15 @@ def build_first_level_door():
     for actor in eas.get_all_level_actors():
         if actor.actor_has_tag(TAG):
             eas.destroy_actor(actor)
-    # At the back of the start platform (which runs x -1500..0), facing along the path; the players start in front of it
-    door = E["spawn"](unreal.EchoTravelDoor, (-1440.0, 0.0, 0.0), (0, 0, 0), "CombatTestDoor", "Combat")
+    # On the left side of the start platform (x -1500..0, y -600..600), facing into it. Not behind the starts: there
+    # the players' cameras sat inside its glowing portal at the start of the level
+    door = E["spawn"](unreal.EchoTravelDoor, (-950.0, -540.0, 0.0), (0, 90, 0), "CombatTestDoor", "Combat")
     door.set_editor_property("target_map", MAPS["Shared"])
     door.set_editor_property("arrival_tag", "ArenaEntrance")
     door.set_editor_property("label", "Combat Test")
-    for role, y in (("Bat", -160.0), ("Saraa", 160.0)):
-        start = E["spawn"](unreal.PlayerStart, (-1150.0, y, 100.0), (0, 0, 0), f"CombatDoor_{role}", "Combat")
+    # Arriving back from the arena: in front of the door, facing along the path
+    for role, x in (("Bat", -1100.0), ("Saraa", -800.0)):
+        start = E["spawn"](unreal.PlayerStart, (x, -260.0, 100.0), (0, 0, 0), f"CombatDoor_{role}", "Combat")
         start.set_editor_property("player_start_tag", f"CombatDoor_{role}")
     les.save_current_level()
     log("first level: the Combat Test door and its arrival starts (tag CombatBuilder)")

@@ -9,7 +9,7 @@ Branch: `milestone-8-combat`, branched from `milestone-7-online` (Milestone 7 is
 ## How to try it
 
 1. Play the first level as usual (PIE, or host and join from the title screen).
-2. Near the start, a glowing **"Combat Test"** door stands just behind the starting point. Either player walks into it and **both** go to the arena (the door arms 2 s after the level starts, so nobody goes through by accident).
+2. Near the start, a glowing **"Combat Test"** door stands on the left side of the start platform, facing in. Either player walks into it and **both** go to the arena (the door arms 2 s after the level starts, so nobody goes through by accident).
 3. In the arena, walk forward out of the entrance to start wave 1. A banner at the top says the wave, how many enemies are left, and a hint.
 4. Behind the start: the **return door** (back to the first level, beside the Combat Test door) and a **Restart arena** button on a plinth (step on it).
 5. Or open `/Game/Echo/Maps/CombatTest` in the editor and press Play.
@@ -95,14 +95,14 @@ All of them work from either player; the guest's go to the server.
 ## Known issues
 
 - **Greybox and placeholder sound:** enemies are built from engine shapes and the sounds are engine editor sounds; there are no attack animations yet (the hurt, roll and downed poses are simple mesh tilts and spins).
-- **The weapons don't follow the animations:** the bow and sword are placed relative to the character, not attached to the hands. (The user asked for this next.)
+- **Weapons on the skeleton (done after the milestone, at the user's request):** the bow rides Bat's spine (`spine_05`), slung and while aiming; the sword rides Saraa's hip (`pelvis`) and is gripped in her right hand while she lashes, charges or swings. The bones are settings on the bow and whip components. The bow stays at the chest while aiming because Bat has no aim animation; with one, set `AimBone` to `hand_l`.
 - **The doors over real EOS aren't tested yet** with two processes. They use the same seamless travel as the lobby's Start Game, which is tested.
 - **Hit-stop** freezes only the enemy hit, not the whole game, so it stays fair online; it's subtle.
 - AI movement uses the navmesh, with direct steering as a fallback; flyers steer directly. Enemies can bunch up around a pillar.
 
 ## Suggestions for Milestone 9
 
-- Attach the weapons to hand sockets and add real attack, hurt and roll animations (montages) on the existing hooks.
+- Add real attack, hurt and roll animations (montages) on the existing hooks.
 - A boss using the same health component and filters: phases that need both players, like the Guardian and the Talon.
 - Combat in the real levels, where the Climb or the Crossing ends in a fight.
 - Real sounds and VFX (Niagara) for the hits, cracks, knockdowns and defeats.
