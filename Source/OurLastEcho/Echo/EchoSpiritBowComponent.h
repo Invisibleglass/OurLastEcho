@@ -58,9 +58,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Arrow", meta = (ClampMin = 0))
 	float Cooldown = 0.6f;
 
-	/** Where arrows leave from, relative to the character (X forward, Y right, Z up) */
+	/** Where arrows leave from, relative to the character (X forward, Y right, Z up), when the bow isn't in a hand */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Arrow")
 	FVector MuzzleOffset = FVector(70.0f, 15.0f, 45.0f);
+
+	/** With the bow in Bat's hand, arrows leave from its grip, this far in front of it (cm, along where he faces) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Arrow")
+	float BowMuzzleForward = 30.0f;
 
 	// ---- Combat shots (Milestone 8): Fire without aiming = quick shot; while aiming, tap = aimed shot, hold = charged shot
 
@@ -144,24 +148,28 @@ public:
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
 	TSoftObjectPtr<UMaterialInterface> BowMaterial;
 
-	/** Where the bow sits relative to the character (capsule centre) when not aiming: slung across the back */
+	/** Fallback when the mesh has no GripBone: where the bow sits relative to the character (capsule centre) when not aiming */
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
 	FTransform BackPlacement = FTransform(FRotator(0.0f, 180.0f, 35.0f), FVector(-24.0f, 0.0f, 38.0f));
 
-	/** ...and while aiming: held upright in front of the chest (the template has no aim animation to raise an arm) */
+	/** Fallback when the mesh has no GripBone: ...and while aiming, upright in front of the chest */
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
 	FTransform AimPlacement = FTransform(FRotator(0.0f, 0.0f, 0.0f), FVector(42.0f, -8.0f, 40.0f));
 
+	/** The hand that holds the bow, all the time (None = the placements above, fixed to the capsule) */
+	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
+	FName GripBone = TEXT("hand_l");
+
 	/**
-	 *  The skeleton bone the bow rides on when slung, so it moves with the animation (None = fixed to the capsule).
-	 *  The placements above stay relative to the character; they're converted to the bone in the reference pose
+	 *  Where the bow sits relative to GripBone when not aiming: its grip in the palm, carried flat at his hip, the
+	 *  limbs pointing forward and back, the string hanging below. Measured from the template's idle pose
 	 */
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
-	FName BackBone = TEXT("spine_05");
+	FTransform HandGrip = FTransform(FRotator(-1.9f, 169.1f, -142.0f), FVector(5.2f, 0.5f, -0.1f));
 
-	/** ...and while aiming. The chest for now: with an aim animation that raises an arm, use the hand (hand_l) */
+	/** ...and while aiming: upright in the same hand, the string towards Bat */
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
-	FName AimBone = TEXT("spine_05");
+	FTransform AimHandGrip = FTransform(FRotator(-45.8f, 73.4f, 97.7f), FVector(5.2f, 0.5f, -0.1f));
 
 public:
 

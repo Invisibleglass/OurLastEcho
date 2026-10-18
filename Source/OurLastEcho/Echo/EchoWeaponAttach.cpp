@@ -41,3 +41,22 @@ bool EchoWeaponAttach::AttachToBone(USceneComponent* Root, ACharacter* Character
 	Root->SetRelativeTransform(PlacementInBone);
 	return true;
 }
+
+bool EchoWeaponAttach::AttachInHand(USceneComponent* Root, ACharacter* Character, FName Bone, const FTransform& BonePlacement, const FTransform& FallbackPlacement)
+{
+	if (!Root || !Character)
+	{
+		return false;
+	}
+	USkeletalMeshComponent* Mesh = Character->GetMesh();
+	if (!Mesh || Bone.IsNone() || Mesh->GetBoneIndex(Bone) == INDEX_NONE)
+	{
+		return AttachToBone(Root, Character, NAME_None, FallbackPlacement);
+	}
+	if (Root->GetAttachParent() != Mesh || Root->GetAttachSocketName() != Bone)
+	{
+		Root->AttachToComponent(Mesh, FAttachmentTransformRules::KeepRelativeTransform, Bone);
+	}
+	Root->SetRelativeTransform(BonePlacement);
+	return true;
+}

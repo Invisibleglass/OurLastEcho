@@ -3,6 +3,8 @@
 #include "EchoSwordWhipComponent.h"
 #include "EchoWeaponAttach.h"
 #include "Camera/CameraComponent.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "EchoGameUserSettings.h"
 #include "CollisionQueryParams.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -62,6 +64,8 @@ UEchoSwordWhipComponent::UEchoSwordWhipComponent()
 
 	WhipAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Whip.IA_Whip")));
 	WhipMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Whip.IMC_Whip")));
+	FocusAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Aim.IA_Aim")));
+	FocusMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Focus.IMC_Focus")));
 	SwordMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_SpiritSword.MI_SpiritSword")));
 	WhipLineMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Materials/MI_WhipLine.MI_WhipLine")));
 	PresentWhipLineMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Echo/Eras/MI_WhipLinePresent.MI_WhipLinePresent")));
@@ -121,7 +125,7 @@ void UEchoSwordWhipComponent::BuildWhipMesh()
 	SwordRoot = NewObject<USceneComponent>(Character, TEXT("SwordWhipRoot"));
 	SwordRoot->SetupAttachment(Character->GetRootComponent());
 	SwordRoot->RegisterComponent();
-	EchoWeaponAttach::AttachToBone(SwordRoot, Character, HolsterBone, HolsterPlacement);
+	EchoWeaponAttach::AttachInHand(SwordRoot, Character, GripBone, HandGrip, HolsterPlacement);
 
 	UMaterialInterface* Material = SwordMaterial.LoadSynchronous();
 	for (const FSwordPart& Part : SwordShape)
@@ -178,6 +182,12 @@ void UEchoSwordWhipComponent::SetupPlayerInput(UEnhancedInputComponent* Input)
 	Input->BindAction(Action, ETriggerEvent::Started, this, &UEchoSwordWhipComponent::OnWhipPressed);
 	Input->BindAction(Action, ETriggerEvent::Completed, this, &UEchoSwordWhipComponent::OnWhipReleased);
 	Input->BindAction(Action, ETriggerEvent::Canceled, this, &UEchoSwordWhipComponent::OnWhipReleased);
+	if (UInputAction* Focus = FocusAction.LoadSynchronous())
+	{
+		Input->BindAction(Focus, ETriggerEvent::Started, this, &UEchoSwordWhipComponent::OnFocusStarted);
+		Input->BindAction(Focus, ETriggerEvent::Completed, this, &UEchoSwordWhipComponent::OnFocusCompleted);
+		Input->BindAction(Focus, ETriggerEvent::Canceled, this, &UEchoSwordWhipComponent::OnFocusCompleted);
+	}
 
 	const APawn* Pawn = GetCharacter();
 	const APlayerController* PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
@@ -187,7 +197,52 @@ void UEchoSwordWhipComponent::SetupPlayerInput(UEnhancedInputComponent* Input)
 		{
 			Subsystem->AddMappingContext(Context, MappingPriority);
 		}
+		if (UInputMappingContext* Context = FocusMappingContext.LoadSynchronous())
+		{
+			Subsystem->AddMappingContext(Context, MappingPriority);
+		}
 	}
+}
+
+void UEchoSwordWhipComponent::OnFocusStarted()
+{
+	// Settings > Controls > Aim mode applies here too: hold, or press to start and press again to stop
+	const UEchoGameUserSettings* Settings = UEchoGameUserSettings::GetEchoSettings();
+	SetFocusing(Settings && Settings->AimMode == EEchoAimMode::Toggle ? !bFocusing : true);
+}
+
+void UEchoSwordWhipComponent::OnFocusCompleted()
+{
+	const UEchoGameUserSettings* Settings = UEchoGameUserSettings::GetEchoSettings();
+	if (!Settings || Settings->AimMode == EEchoAimMode::Hold)
+	{
+		SetFocusing(false);
+	}
+}
+
+void UEchoSwordWhipComponent::UpdateFocusCamera(float DeltaTime)
+{
+	AOurLastEchoCharacter* Character = GetCharacter();
+	USpringArmComponent* Boom = Character ? Character->GetCameraBoom() : nullptr;
+	UCameraComponent* Camera = Character ? Character->GetFollowCamera() : nullptr;
+	if (!Boom || !Camera)
+	{
+		return;
+	}
+	if (!bFocusDefaultsCaptured)
+	{
+		bFocusDefaultsCaptured = true;
+		DefaultArmLength = Boom->TargetArmLength;
+		DefaultSocketOffset = Boom->SocketOffset;
+		DefaultFieldOfView = Camera->FieldOfView;
+	}
+	if (!bFocusing && FMath::IsNearlyEqual(Boom->TargetArmLength, DefaultArmLength, 0.5f))
+	{
+		return;
+	}
+	Boom->TargetArmLength = FMath::FInterpTo(Boom->TargetArmLength, bFocusing ? FocusCameraDistance : DefaultArmLength, DeltaTime, FocusBlendSpeed);
+	Boom->SocketOffset = FMath::VInterpTo(Boom->SocketOffset, bFocusing ? FocusCameraOffset : DefaultSocketOffset, DeltaTime, FocusBlendSpeed);
+	Camera->SetFieldOfView(FMath::FInterpTo(Camera->FieldOfView, bFocusing ? FocusFieldOfView : DefaultFieldOfView, DeltaTime, FocusBlendSpeed));
 }
 
 void UEchoSwordWhipComponent::OnWhipPressed()
@@ -606,6 +661,7 @@ void UEchoSwordWhipComponent::TickComponent(float DeltaTime, ELevelTick TickType
 		if (Character->IsLocallyControlled())
 		{
 			UpdateTargeting();
+			UpdateFocusCamera(DeltaTime);
 		}
 		UpdateWhipLook(DeltaTime);
 
@@ -658,7 +714,7 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 		{
 			bLineShown = false;
 			WhipLine->SetVisibility(false);
-			EchoWeaponAttach::AttachToBone(SwordRoot, Character, HolsterBone, HolsterPlacement);
+			EchoWeaponAttach::AttachInHand(SwordRoot, Character, GripBone, HandGrip, HolsterPlacement);
 		}
 		return;
 	}
@@ -677,13 +733,14 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 		}
 	}
 
-	// Sword raised at the shoulder, pointing at the anchor (or along the lash); the line runs from its tip
-	FVector Hand = Character->GetActorTransform().TransformPosition(HeldLocation);
+	// The sword stays in her hand and turns to point at the anchor (or along the lash); the line runs from its tip.
+	// Grip = the middle of its handle (in her palm); the root is the pommel end, GripCentreZ below it
+	constexpr float GripCentreZ = 8.0f;
+	FVector Grip = Character->GetActorTransform().TransformPosition(HeldLocation);
 	const USkeletalMeshComponent* Body = Character->GetMesh();
-	if (Body && !GripBone.IsNone() && GripFollow > 0.0f && Body->GetBoneIndex(GripBone) != INDEX_NONE)
+	if (Body && !GripBone.IsNone() && Body->GetBoneIndex(GripBone) != INDEX_NONE)
 	{
-		// In her hand, following the animation
-		Hand = FMath::Lerp(Hand, Body->GetBoneLocation(GripBone), GripFollow);
+		Grip = Body->GetSocketTransform(GripBone).TransformPosition(HandGrip.TransformPosition(FVector(0.0f, 0.0f, GripCentreZ)));
 	}
 	const float Progress = 1.0f - LashRemaining / LashDuration;
 	FVector LashDir = LashLookDirection;
@@ -693,7 +750,8 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 		LashDir = FRotator(0.0f, FMath::Lerp(-55.0f, 55.0f, Progress), 0.0f).RotateVector(LashLookDirection);
 	}
 	const FVector ChargeDir = (Character->GetActorForwardVector() + FVector(0.0f, 0.0f, 1.2f)).GetSafeNormal();
-	const FVector Direction = bCharging ? ChargeDir : bLashing ? LashDir : (Anchor - Hand).GetSafeNormal();
+	const FVector Direction = bCharging ? ChargeDir : bLashing ? LashDir : (Anchor - Grip).GetSafeNormal();
+	const FVector Hand = Grip - Direction * GripCentreZ;
 	SwordRoot->SetWorldLocationAndRotation(Hand, FRotationMatrix::MakeFromZ(Direction).Rotator());
 
 	const FVector Tip = Hand + Direction * SwordTipZ;

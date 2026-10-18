@@ -22,4 +22,10 @@ namespace EchoWeaponAttach
 	 *  With no such bone (or Bone = None) it attaches to the capsule at ActorPlacement, as before; returns false then.
 	 */
 	bool AttachToBone(USceneComponent* Root, ACharacter* Character, FName Bone, const FTransform& ActorPlacement);
+
+	/**
+	 *  Puts Root in a hand: attached to Bone at BonePlacement, which is relative to the bone itself (a grip). With no
+	 *  such bone it attaches to the capsule at FallbackPlacement (relative to the actor); returns false then.
+	 */
+	bool AttachInHand(USceneComponent* Root, ACharacter* Character, FName Bone, const FTransform& BonePlacement, const FTransform& FallbackPlacement);
 }

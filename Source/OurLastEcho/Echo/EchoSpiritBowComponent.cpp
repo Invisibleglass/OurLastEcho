@@ -267,7 +267,7 @@ void UEchoSpiritBowComponent::ApplyAimState()
 
 	if (BowRoot)
 	{
-		EchoWeaponAttach::AttachToBone(BowRoot, Character, bAiming ? AimBone : BackBone, bAiming ? AimPlacement : BackPlacement);
+		EchoWeaponAttach::AttachInHand(BowRoot, Character, GripBone, bAiming ? AimHandGrip : HandGrip, bAiming ? AimPlacement : BackPlacement);
 	}
 }
 
@@ -480,7 +480,12 @@ AEchoArrow* UEchoSpiritBowComponent::FireShotAt(FVector TargetPoint, EEchoAttack
 
 	// Leave from in front of the chest, facing where the player is looking
 	const FRotator Facing(0.0f, Character->GetControlRotation().Yaw, 0.0f);
-	const FVector Start = Character->GetActorLocation() + Facing.RotateVector(MuzzleOffset);
+	FVector Start = Character->GetActorLocation() + Facing.RotateVector(MuzzleOffset);
+	if (BowRoot && BowRoot->GetAttachParent() == Character->GetMesh())
+	{
+		// From the bow in his hand
+		Start = BowRoot->GetComponentLocation() + Facing.Vector() * BowMuzzleForward;
+	}
 
 	// Correct the launch angle for the arc so the arrow still lands where the reticle was
 	FVector Velocity = (TargetPoint - Start).GetSafeNormal() * Speed;

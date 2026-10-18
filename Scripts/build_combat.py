@@ -128,6 +128,19 @@ def build_input():
     save(imc)
     log("input: IA_Dodge on Left Shift / gamepad B (IMC_Combat)")
 
+    # Saraa's focus (camera in over her shoulder): the bow's Aim action on its own, without IMC_Bow's Fire on the
+    # left mouse button, which would compete with her whip
+    aim = eal.load_asset("/Game/Input/Actions/IA_Aim")
+    focus = get_or_create("IMC_Focus", INPUT_DIR, unreal.InputMappingContext,
+                          unreal.InputMappingContext_Factory() if hasattr(unreal, "InputMappingContext_Factory") else None)
+    focus.unmap_all()
+    for key_name in ("RightMouseButton", "Gamepad_LeftTrigger"):
+        key = unreal.Key()
+        key.import_text(key_name)
+        focus.map_key(aim, key)
+    save(focus)
+    log("input: IA_Aim on right mouse / left trigger for Saraa's focus (IMC_Focus)")
+
 
 ENEMY_BPS = {"BP_DustWraith": unreal.EchoDustWraith, "BP_Shade": unreal.EchoShade,
              "BP_StoneGuardian": unreal.EchoStoneGuardian, "BP_SkyTalon": unreal.EchoSkyTalon}

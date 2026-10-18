@@ -31,6 +31,7 @@ namespace
 		TEXT("/Game/Input/IMC_Whip.IMC_Whip"),
 		TEXT("/Game/Input/IMC_Menu.IMC_Menu"),
 		TEXT("/Game/Input/IMC_Combat.IMC_Combat"),
+		TEXT("/Game/Input/IMC_Focus.IMC_Focus"),
 	};
 
 	/** Key rows in this order (anything else registered goes after) */

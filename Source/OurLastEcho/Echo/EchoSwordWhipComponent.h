@@ -115,28 +115,48 @@ public:
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
 	TSoftObjectPtr<UMaterialInterface> PresentWhipLineMaterial;
 
-	/** Where the sword hangs relative to the character (capsule centre) when not swinging: at the left hip */
-	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
-	FTransform HolsterPlacement = FTransform(FRotator(-150.0f, 0.0f, 0.0f), FVector(8.0f, -26.0f, 0.0f));
-
-	/** Where the sword is held while swinging; it points at the anchor from here */
-	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
-	FVector HeldLocation = FVector(10.0f, 22.0f, 70.0f);
-
-	/**
-	 *  The skeleton bone the holstered sword rides on, so it moves with her hips (None = fixed to the capsule). The
-	 *  holster placement stays relative to the character; it's converted to the bone in the reference pose
-	 */
-	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
-	FName HolsterBone = TEXT("pelvis");
-
-	/** While swinging, lashing or charging, the sword is gripped at this bone and follows her hand (None = HeldLocation) */
+	/** The hand that holds the sword, all the time (None = HolsterPlacement / HeldLocation, fixed to the capsule) */
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
 	FName GripBone = TEXT("hand_r");
 
-	/** How far the grip follows the hand bone: 1 = right in the hand, 0 = at HeldLocation (by the shoulder) */
-	UPROPERTY(EditAnywhere, Category="Sword Whip|Look", meta = (ClampMin = 0, ClampMax = 1))
-	float GripFollow = 1.0f;
+	/**
+	 *  Where the sword sits relative to GripBone when she isn't using the whip: the grip in her palm, the blade
+	 *  forward and 30 degrees down. Measured from the template's idle pose. While she swings, lashes or charges, the
+	 *  blade turns to point along the whip, still from her hand
+	 */
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
+	FTransform HandGrip = FTransform(FRotator(2.9f, -94.9f, -34.2f), FVector(-0.7f, -1.3f, -6.5f));
+
+	/** Fallback with no GripBone: where the sword hangs relative to the character (capsule centre) */
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
+	FTransform HolsterPlacement = FTransform(FRotator(-150.0f, 0.0f, 0.0f), FVector(8.0f, -26.0f, 0.0f));
+
+	/** Fallback with no GripBone: where the sword is held while swinging; it points at the anchor from here */
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
+	FVector HeldLocation = FVector(10.0f, 22.0f, 70.0f);
+
+	// ---- Focus: right mouse / left trigger moves the camera in over her shoulder (her own screen only)
+
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Focus")
+	TSoftObjectPtr<UInputAction> FocusAction;
+
+	/** The mapping context with FocusAction (the bow's IMC_Bow: Aim = right mouse / left trigger) */
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Focus")
+	TSoftObjectPtr<UInputMappingContext> FocusMappingContext;
+
+	/** Camera distance while focusing (cm); Bat's aim uses 160, the normal view 400 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Focus", meta = (ClampMin = 50))
+	float FocusCameraDistance = 260.0f;
+
+	/** Camera offset while focusing (over her right shoulder) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Focus")
+	FVector FocusCameraOffset = FVector(0.0f, 50.0f, 35.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Focus", meta = (ClampMin = 30, ClampMax = 120))
+	float FocusFieldOfView = 80.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Focus", meta = (ClampMin = 0.1))
+	float FocusBlendSpeed = 10.0f;
 
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Sound")
 	TSoftObjectPtr<USoundBase> ReleaseSound;
@@ -290,6 +310,14 @@ public:
 	UFUNCTION(BlueprintPure, Category="Sword Whip|Debug")
 	static bool IsDebugDrawOn() { return bDebugDraw; }
 
+	/** Is the camera moved in over her shoulder (the focus button)? Her own machine only */
+	UFUNCTION(BlueprintPure, Category="Sword Whip|Focus")
+	bool IsFocusing() const { return bFocusing; }
+
+	/** Moves the camera in or back out (owner; the focus button calls this) */
+	UFUNCTION(BlueprintCallable, Category="Sword Whip|Focus")
+	void SetFocusing(bool bNewFocusing) { bFocusing = bNewFocusing; }
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -300,6 +328,17 @@ protected:
 
 	void OnWhipPressed();
 	void OnWhipReleased();
+	void OnFocusStarted();
+	void OnFocusCompleted();
+
+	/** Blends her camera in or out (local only: cameras don't replicate) */
+	void UpdateFocusCamera(float DeltaTime);
+
+	bool bFocusing = false;
+	bool bFocusDefaultsCaptured = false;
+	float DefaultArmLength = 400.0f;
+	FVector DefaultSocketOffset = FVector::ZeroVector;
+	float DefaultFieldOfView = 90.0f;
 
 	UFUNCTION()
 	void OnRep_LatchCount();
