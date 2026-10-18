@@ -266,7 +266,10 @@ def set_game_mode(world):
 def build_shared():
     world = E["open_map"](MAPS["Shared"])
     for actor in eas.get_all_level_actors():
-        if not isinstance(actor, (unreal.WorldSettings, unreal.Brush)) and not isinstance(actor, unreal.RecastNavMesh):
+        # Keep the world settings, the level's builder brush and the navmesh data; volumes are brushes too, so they
+        # need clearing explicitly (an old ArenaNavBounds used to survive every rebuild)
+        builder_brush = isinstance(actor, unreal.Brush) and not isinstance(actor, unreal.Volume)
+        if not (isinstance(actor, (unreal.WorldSettings, unreal.RecastNavMesh)) or builder_brush):
             eas.destroy_actor(actor)
     set_game_mode(world)
     build_arena_geometry()
@@ -377,7 +380,28 @@ def main():
     les.save_current_level()
     build_first_level_door()
     unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)
-    log("done")
+    finish_with_navmesh()
+
+
+def finish_with_navmesh():
+    """Back in the arena, rebuild its navmesh and save once the build is done. It builds over the next editor
+    ticks, so saving straight away stored a stale one ("NAVMESH NEEDS TO BE REBUILT" in play)"""
+    E["open_map"](MAPS["Shared"])
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    unreal.SystemLibrary.execute_console_command(world, "RebuildNavigation")
+    state = {"handle": None, "t": 0.0}
+
+    def tick(delta):
+        state["t"] += delta
+        nav = unreal.NavigationSystemV1.get_navigation_system(world)
+        building = nav.is_navigation_being_built(world) if nav else False
+        if (state["t"] > 2.0 and not building) or state["t"] > 120.0:
+            unreal.unregister_slate_post_tick_callback(state["handle"])
+            les.save_current_level()
+            log(f"navmesh built in {state['t']:.1f}s" + (" (timed out)" if building else ""))
+            log("done")
+
+    state["handle"] = unreal.register_slate_post_tick_callback(tick)
 
 
 if not globals().get("ECHO_COMBAT_NO_BUILD"):
