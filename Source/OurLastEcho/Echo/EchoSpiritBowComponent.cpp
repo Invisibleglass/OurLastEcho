@@ -1,6 +1,7 @@
 // Our Last Echo
 
 #include "EchoSpiritBowComponent.h"
+#include "EchoWeaponAttach.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -266,7 +267,7 @@ void UEchoSpiritBowComponent::ApplyAimState()
 
 	if (BowRoot)
 	{
-		BowRoot->SetRelativeTransform(bAiming ? AimPlacement : BackPlacement);
+		EchoWeaponAttach::AttachToBone(BowRoot, Character, bAiming ? AimBone : BackBone, bAiming ? AimPlacement : BackPlacement);
 	}
 }
 

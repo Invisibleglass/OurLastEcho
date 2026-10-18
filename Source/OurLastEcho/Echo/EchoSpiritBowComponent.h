@@ -152,6 +152,17 @@ public:
 	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
 	FTransform AimPlacement = FTransform(FRotator(0.0f, 0.0f, 0.0f), FVector(42.0f, -8.0f, 40.0f));
 
+	/**
+	 *  The skeleton bone the bow rides on when slung, so it moves with the animation (None = fixed to the capsule).
+	 *  The placements above stay relative to the character; they're converted to the bone in the reference pose
+	 */
+	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
+	FName BackBone = TEXT("spine_05");
+
+	/** ...and while aiming. The chest for now: with an aim animation that raises an arm, use the hand (hand_l) */
+	UPROPERTY(EditAnywhere, Category="Spirit Bow|Look")
+	FName AimBone = TEXT("spine_05");
+
 public:
 
 	UEchoSpiritBowComponent();

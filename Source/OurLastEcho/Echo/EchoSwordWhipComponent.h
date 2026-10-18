@@ -123,6 +123,21 @@ public:
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
 	FVector HeldLocation = FVector(10.0f, 22.0f, 70.0f);
 
+	/**
+	 *  The skeleton bone the holstered sword rides on, so it moves with her hips (None = fixed to the capsule). The
+	 *  holster placement stays relative to the character; it's converted to the bone in the reference pose
+	 */
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
+	FName HolsterBone = TEXT("pelvis");
+
+	/** While swinging, lashing or charging, the sword is gripped at this bone and follows her hand (None = HeldLocation) */
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Look")
+	FName GripBone = TEXT("hand_r");
+
+	/** How far the grip follows the hand bone: 1 = right in the hand, 0 = at HeldLocation (by the shoulder) */
+	UPROPERTY(EditAnywhere, Category="Sword Whip|Look", meta = (ClampMin = 0, ClampMax = 1))
+	float GripFollow = 1.0f;
+
 	UPROPERTY(EditAnywhere, Category="Sword Whip|Sound")
 	TSoftObjectPtr<USoundBase> ReleaseSound;
 	/** Played with the whip lash (the whip button with no anchor to latch onto) */

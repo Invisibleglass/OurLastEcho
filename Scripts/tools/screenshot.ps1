@@ -4,7 +4,7 @@ param([Parameter(Mandatory)] [string]$Out, [string]$Window = "")
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "ourlastecho_capture.txt"
 if ($Window) {
     $s = & "$PSScriptRoot\mcp.ps1" -Tool Snapshot -Toolset SlateInspectorToolset.SlateInspectorToolset -ArgsJson '{"ref":"","maxDepth":1}'
-    $ref = [regex]::Match($s, 'window \\"[^\]*' + [regex]::Escape($Window) + '[^\]*\\" \[[^\]]*\] \[ref=(w\d+)\]').Groups[1].Value
+    $ref = [regex]::Match($s, 'window \\"[^"]*' + [regex]::Escape($Window) + '[^"]*\\" \[[^\]]*\] \[ref=(w\d+)\]').Groups[1].Value
     if (-not $ref) { "window '$Window' not found"; exit 1 }
     & "$PSScriptRoot\mcp.ps1" -Tool Screenshot -Toolset SlateInspectorToolset.SlateInspectorToolset -ArgsJson ('{"ref":"' + $ref + '"}') | Out-File $tmp -Encoding utf8
 } else {

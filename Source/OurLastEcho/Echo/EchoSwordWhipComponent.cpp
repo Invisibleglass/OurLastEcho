@@ -1,6 +1,7 @@
 // Our Last Echo
 
 #include "EchoSwordWhipComponent.h"
+#include "EchoWeaponAttach.h"
 #include "Camera/CameraComponent.h"
 #include "CollisionQueryParams.h"
 #include "Components/StaticMeshComponent.h"
@@ -120,7 +121,7 @@ void UEchoSwordWhipComponent::BuildWhipMesh()
 	SwordRoot = NewObject<USceneComponent>(Character, TEXT("SwordWhipRoot"));
 	SwordRoot->SetupAttachment(Character->GetRootComponent());
 	SwordRoot->RegisterComponent();
-	SwordRoot->SetRelativeTransform(HolsterPlacement);
+	EchoWeaponAttach::AttachToBone(SwordRoot, Character, HolsterBone, HolsterPlacement);
 
 	UMaterialInterface* Material = SwordMaterial.LoadSynchronous();
 	for (const FSwordPart& Part : SwordShape)
@@ -626,7 +627,7 @@ void UEchoSwordWhipComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 {
-	const AOurLastEchoCharacter* Character = GetCharacter();
+	AOurLastEchoCharacter* Character = GetCharacter();
 	if (!SwordRoot || !WhipLine)
 	{
 		return;
@@ -657,7 +658,7 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 		{
 			bLineShown = false;
 			WhipLine->SetVisibility(false);
-			SwordRoot->SetRelativeTransform(HolsterPlacement);
+			EchoWeaponAttach::AttachToBone(SwordRoot, Character, HolsterBone, HolsterPlacement);
 		}
 		return;
 	}
@@ -677,7 +678,13 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 	}
 
 	// Sword raised at the shoulder, pointing at the anchor (or along the lash); the line runs from its tip
-	const FVector Hand = Character->GetActorTransform().TransformPosition(HeldLocation);
+	FVector Hand = Character->GetActorTransform().TransformPosition(HeldLocation);
+	const USkeletalMeshComponent* Body = Character->GetMesh();
+	if (Body && !GripBone.IsNone() && GripFollow > 0.0f && Body->GetBoneIndex(GripBone) != INDEX_NONE)
+	{
+		// In her hand, following the animation
+		Hand = FMath::Lerp(Hand, Body->GetBoneLocation(GripBone), GripFollow);
+	}
 	const float Progress = 1.0f - LashRemaining / LashDuration;
 	FVector LashDir = LashLookDirection;
 	if (bLashing && LashKind == EEchoAttackKind::WhipFinisher)
