@@ -21,6 +21,7 @@
 #include "EchoAnchorPoint.h"
 #include "EchoAnchorTarget.h"
 #include "EchoCharacterMovementComponent.h"
+#include "EchoHealthComponent.h"
 #include "EchoTrainingDummy.h"
 #include "EchoTypes.h"
 #include "EchoVisibility.h"
@@ -190,12 +191,80 @@ void UEchoSwordWhipComponent::SetupPlayerInput(UEnhancedInputComponent* Input)
 
 void UEchoSwordWhipComponent::OnWhipPressed()
 {
-	PressWhip();
+	const AOurLastEchoCharacter* Character = GetCharacter();
+	if (!Character || !CanUseWhip() || Character->IsDowned())
+	{
+		return;
+	}
+	// An anchor to swing from: latch. Otherwise it's an attack: a tap lashes (the combo), a hold charges
+	if (HighlightedAnchor.IsValid() || FindBestAnchor())
+	{
+		PressWhip();
+		return;
+	}
+	bAttackHeld = true;
+	AttackPressTime = GetWorld()->GetTimeSeconds();
 }
 
 void UEchoSwordWhipComponent::OnWhipReleased()
 {
+	if (bAttackHeld)
+	{
+		bAttackHeld = false;
+		const float Held = GetWorld()->GetTimeSeconds() - AttackPressTime;
+		if (Held >= ChargeThreshold)
+		{
+			FVector ViewLocation;
+			FVector ViewDirection;
+			GetView(ViewLocation, ViewDirection);
+			LashOfKind(ViewDirection, EEchoAttackKind::WhipCharged, FMath::Clamp(Held / FullChargeTime, 0.0f, 1.0f));
+		}
+		else
+		{
+			ComboLash();
+		}
+	}
 	ReleaseWhip();
+}
+
+bool UEchoSwordWhipComponent::IsChargingLash() const
+{
+	return bAttackHeld && GetWorld()->GetTimeSeconds() - AttackPressTime >= ChargeThreshold;
+}
+
+float UEchoSwordWhipComponent::GetLashChargeFraction() const
+{
+	return IsChargingLash() ? FMath::Clamp((GetWorld()->GetTimeSeconds() - AttackPressTime) / FullChargeTime, 0.0f, 1.0f) : 0.0f;
+}
+
+int32 UEchoSwordWhipComponent::GetLashKindCount(EEchoAttackKind Kind) const
+{
+	const int32* Count = LashKindCounts.Find(Kind);
+	return Count ? *Count : 0;
+}
+
+float UEchoSwordWhipComponent::GetRecoveryAfter(EEchoAttackKind Kind) const
+{
+	return Kind == EEchoAttackKind::WhipFinisher ? FinisherRecovery : Kind == EEchoAttackKind::WhipCharged ? ChargedRecovery : ComboLashInterval;
+}
+
+bool UEchoSwordWhipComponent::ComboLash()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastLashTime > ComboWindow)
+	{
+		ComboIndex = 0;
+	}
+	FVector ViewLocation;
+	FVector ViewDirection;
+	GetView(ViewLocation, ViewDirection);
+	const EEchoAttackKind Kind = ComboIndex >= 2 ? EEchoAttackKind::WhipFinisher : EEchoAttackKind::WhipLight;
+	if (!LashOfKind(ViewDirection, Kind))
+	{
+		return false;
+	}
+	ComboIndex = (ComboIndex + 1) % 3;
+	return true;
 }
 
 bool UEchoSwordWhipComponent::PressWhip()
@@ -235,51 +304,64 @@ bool UEchoSwordWhipComponent::Lash()
 
 bool UEchoSwordWhipComponent::LashInDirection(FVector Direction)
 {
-	if (!CanUseWhip() || IsSwinging())
+	return LashOfKind(Direction, EEchoAttackKind::WhipLight);
+}
+
+bool UEchoSwordWhipComponent::LashOfKind(FVector Direction, EEchoAttackKind Kind, float ChargeAlpha)
+{
+	const AOurLastEchoCharacter* Character = GetCharacter();
+	if (!Character || !CanUseWhip() || IsSwinging() || Character->IsDowned())
 	{
 		return false;
 	}
 
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (Now - LastLashTime < LashCooldown)
+	if (Now < NextLashTime)
 	{
 		return false;
 	}
 	LastLashTime = Now;
+	NextLashTime = Now + GetRecoveryAfter(Kind);
 
 	// Mostly level: a lash is a horizontal crack, whatever the camera pitch
 	Direction.Z = FMath::Clamp(Direction.Z, -0.3f, 0.3f);
 	Direction = Direction.GetSafeNormal(UE_SMALL_NUMBER, GetOwner()->GetActorForwardVector());
 
+	LashKind = Kind;
 	StartLashLook(Direction);
 	if (GetOwner()->HasAuthority())
 	{
-		DoLash(Direction);
+		DoLash(Direction, Kind, ChargeAlpha);
 	}
 	else
 	{
-		ServerLash(Direction);
+		ServerLash(Direction, Kind, ChargeAlpha);
 	}
 	return true;
 }
 
-void UEchoSwordWhipComponent::ServerLash_Implementation(FVector_NetQuantizeNormal Direction)
+void UEchoSwordWhipComponent::ServerLash_Implementation(FVector_NetQuantizeNormal Direction, EEchoAttackKind Kind, float ChargeAlpha)
 {
-	// Same cooldown as the owner, with some slack for network timing
+	// The same timing as the owner, with some slack for the network
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (!CanUseWhip() || IsSwinging() || Now - LastLashTime < LashCooldown * 0.8f)
+	const AOurLastEchoCharacter* Character = GetCharacter();
+	if (!Character || !CanUseWhip() || IsSwinging() || Character->IsDowned() || Now < NextLashTime - 0.1f
+		|| (Kind != EEchoAttackKind::WhipLight && Kind != EEchoAttackKind::WhipFinisher && Kind != EEchoAttackKind::WhipCharged))
 	{
 		return;
 	}
 	LastLashTime = Now;
-	DoLash(Direction);
+	NextLashTime = Now + GetRecoveryAfter(Kind) * 0.8f;
+	DoLash(Direction, Kind, FMath::Clamp(ChargeAlpha, 0.0f, 1.0f));
 }
 
-void UEchoSwordWhipComponent::DoLash(const FVector& Direction)
+void UEchoSwordWhipComponent::DoLash(const FVector& Direction, EEchoAttackKind Kind, float ChargeAlpha)
 {
 	AOurLastEchoCharacter* Character = GetCharacter();
 	++LashCount;
 	LashDirection = Direction;
+	LashKind = Kind;
+	LashKindCounts.FindOrAdd(Kind)++;
 
 	// The server's own view of a remote Saraa (the owner already shows it)
 	if (!Character->IsLocallyControlled())
@@ -287,12 +369,44 @@ void UEchoSwordWhipComponent::DoLash(const FVector& Direction)
 		StartLashLook(Direction);
 	}
 
-	// Sweep along the lash from her chest; the first thing it meets takes the hit
+	const float Range = Kind == EEchoAttackKind::WhipCharged ? ChargedLashRange : LashRange;
+	const float Radius = Kind == EEchoAttackKind::WhipCharged ? ChargedLashRadius : Kind == EEchoAttackKind::WhipFinisher ? FinisherRadius : LashRadius;
+	const float Damage = Kind == EEchoAttackKind::WhipCharged ? ChargedLashDamage * FMath::Lerp(0.5f, 1.0f, ChargeAlpha)
+		: Kind == EEchoAttackKind::WhipFinisher ? FinisherDamage : LightLashDamage;
 	const FVector Start = Character->GetActorLocation() + FVector(0.0f, 0.0f, 40.0f);
-	const FVector End = Start + Direction * LashRange;
+	const FVector End = Start + Direction * Range;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SwordWhipLash), false, Character);
+
+	// Everything with health along the lash takes the hit (the server decides what it does: Bat-only enemies ignore it)
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_Pawn);
+	Objects.AddObjectTypesToQuery(ECC_SpiritPawn);
+	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	TArray<FHitResult> Hits;
+	GetWorld()->SweepMultiByObjectType(Hits, Start, End, FQuat::Identity, Objects, FCollisionShape::MakeSphere(Radius), Params);
+	TSet<AActor*> Struck;
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* Victim = Hit.GetActor();
+		UEchoHealthComponent* Health = UEchoHealthComponent::FindOn(Victim);
+		if (!Health || Victim == Character || Struck.Contains(Victim))
+		{
+			continue;
+		}
+		Struck.Add(Victim);
+		FEchoDamageInfo Info;
+		Info.Amount = Damage;
+		Info.Kind = Kind;
+		Info.bHeavy = Kind != EEchoAttackKind::WhipLight;
+		Info.Instigator = Character;
+		Info.HitLocation = Hit.ImpactPoint;
+		Info.Direction = Direction;
+		Health->ApplyDamage(Info);
+	}
+
+	// The training dummy (Milestone 4) still answers to a lash
 	FHitResult Hit;
-	if (GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(LashRadius), Params))
+	if (GetWorld()->SweepSingleByChannel(Hit, Start, Start + Direction * LashRange, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(LashRadius), Params))
 	{
 		if (AEchoTrainingDummy* Dummy = Cast<AEchoTrainingDummy>(Hit.GetActor()))
 		{
@@ -534,8 +648,10 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 
 	LashRemaining = FMath::Max(0.0f, LashRemaining - DeltaTime);
 	const bool bLashing = !bShow && LashRemaining > 0.0f;
+	// Holding for a charged lash: the whip coils up in front of her, growing with the charge (her own screen)
+	const bool bCharging = !bShow && !bLashing && Character->IsLocallyControlled() && IsChargingLash();
 
-	if (!bShow && !bLashing)
+	if (!bShow && !bLashing && !bCharging)
 	{
 		if (bLineShown)
 		{
@@ -562,15 +678,32 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 
 	// Sword raised at the shoulder, pointing at the anchor (or along the lash); the line runs from its tip
 	const FVector Hand = Character->GetActorTransform().TransformPosition(HeldLocation);
-	const FVector Direction = bLashing ? LashLookDirection : (Anchor - Hand).GetSafeNormal();
+	const float Progress = 1.0f - LashRemaining / LashDuration;
+	FVector LashDir = LashLookDirection;
+	if (bLashing && LashKind == EEchoAttackKind::WhipFinisher)
+	{
+		// The finisher sweeps a wide arc
+		LashDir = FRotator(0.0f, FMath::Lerp(-55.0f, 55.0f, Progress), 0.0f).RotateVector(LashLookDirection);
+	}
+	const FVector ChargeDir = (Character->GetActorForwardVector() + FVector(0.0f, 0.0f, 1.2f)).GetSafeNormal();
+	const FVector Direction = bCharging ? ChargeDir : bLashing ? LashDir : (Anchor - Hand).GetSafeNormal();
 	SwordRoot->SetWorldLocationAndRotation(Hand, FRotationMatrix::MakeFromZ(Direction).Rotator());
 
 	const FVector Tip = Hand + Direction * SwordTipZ;
 	FVector End;
-	if (bLashing)
+	float ThicknessScale = 1.0f;
+	if (bCharging)
 	{
-		// Cracks out to full reach and snaps back
-		End = Tip + Direction * LashRange * FMath::Sin(PI * (1.0f - LashRemaining / LashDuration));
+		const float Charge = GetLashChargeFraction();
+		End = Tip + Direction * (40.0f + 110.0f * Charge) * (0.85f + 0.15f * FMath::Sin(GetWorld()->GetTimeSeconds() * 30.0f));
+		ThicknessScale = 1.0f + Charge;
+	}
+	else if (bLashing)
+	{
+		// Cracks out to full reach and snaps back (the charged lash reaches much further, and is thicker)
+		const float Reach = LashKind == EEchoAttackKind::WhipCharged ? ChargedLashRange : LashRange;
+		End = Tip + Direction * Reach * FMath::Sin(PI * Progress);
+		ThicknessScale = LashKind == EEchoAttackKind::WhipCharged ? 2.2f : LashKind == EEchoAttackKind::WhipFinisher ? 1.6f : 1.0f;
 	}
 	else
 	{
@@ -585,7 +718,7 @@ void UEchoSwordWhipComponent::UpdateWhipLook(float DeltaTime)
 		return;
 	}
 
-	const float Width = WhipLineThickness / 100.0f;
+	const float Width = WhipLineThickness * ThicknessScale / 100.0f;
 	WhipLine->SetWorldLocationAndRotation((Tip + End) * 0.5f, FRotationMatrix::MakeFromZ(Span / Length).Rotator());
 	WhipLine->SetWorldScale3D(FVector(Width, Width, Length / 100.0f));
 	WhipLine->SetVisibility(true);
@@ -692,4 +825,5 @@ void UEchoSwordWhipComponent::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, LatchCount, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, LashCount, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, LashDirection, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(UEchoSwordWhipComponent, LashKind, COND_SkipOwner);
 }

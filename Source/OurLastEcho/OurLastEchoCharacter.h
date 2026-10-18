@@ -15,6 +15,8 @@ class UMaterialInterface;
 class UEchoSpiritBowComponent;
 class UEchoSwordWhipComponent;
 class UEchoCharacterMovementComponent;
+class UEchoHealthComponent;
+class UEchoPlayerCombatComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -43,6 +45,14 @@ class AOurLastEchoCharacter : public ACharacter
 	/** Sword whip. Every character has one, but only a Spirit-realm character (Saraa) can use it; tune it on BP_Saraa */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UEchoSwordWhipComponent> SwordWhip;
+
+	/** Health (Milestone 8): the shared health component players and enemies use. MaxHealth is set per Blueprint */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UEchoHealthComponent> Health;
+
+	/** Dodge roll, downed and respawn, hurt reaction (Milestone 8); tune per Blueprint */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UEchoPlayerCombatComponent> PlayerCombat;
 
 protected:
 
@@ -175,10 +185,22 @@ public:
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
 	/** Returns the spirit bow component */
-	FORCEINLINE UEchoSpiritBowComponent* GetSpiritBow() const { return SpiritBow; }
+	UFUNCTION(BlueprintPure, Category="Echo")
+	UEchoSpiritBowComponent* GetSpiritBow() const { return SpiritBow; }
 
 	/** Returns the sword whip component */
-	FORCEINLINE UEchoSwordWhipComponent* GetSwordWhip() const { return SwordWhip; }
+	UFUNCTION(BlueprintPure, Category="Echo")
+	UEchoSwordWhipComponent* GetSwordWhip() const { return SwordWhip; }
+
+	UFUNCTION(BlueprintPure, Category="Echo")
+	UEchoHealthComponent* GetHealth() const { return Health; }
+
+	UFUNCTION(BlueprintPure, Category="Echo")
+	UEchoPlayerCombatComponent* GetPlayerCombat() const { return PlayerCombat; }
+
+	/** Down at zero health: can't move or attack until revived */
+	UFUNCTION(BlueprintPure, Category="Echo|Combat")
+	bool IsDowned() const;
 
 	/** Returns the movement component as ours (never null) */
 	UEchoCharacterMovementComponent* GetEchoMovement() const;

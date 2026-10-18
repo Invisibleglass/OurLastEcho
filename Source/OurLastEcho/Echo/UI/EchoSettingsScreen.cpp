@@ -30,10 +30,11 @@ namespace
 		TEXT("/Game/Input/IMC_Bow.IMC_Bow"),
 		TEXT("/Game/Input/IMC_Whip.IMC_Whip"),
 		TEXT("/Game/Input/IMC_Menu.IMC_Menu"),
+		TEXT("/Game/Input/IMC_Combat.IMC_Combat"),
 	};
 
 	/** Key rows in this order (anything else registered goes after) */
-	const TCHAR* KeyOrder[] = { TEXT("MoveForward"), TEXT("MoveBackward"), TEXT("MoveLeft"), TEXT("MoveRight"), TEXT("Jump"), TEXT("Aim"), TEXT("Fire"), TEXT("Whip"), TEXT("Menu") };
+	const TCHAR* KeyOrder[] = { TEXT("MoveForward"), TEXT("MoveBackward"), TEXT("MoveLeft"), TEXT("MoveRight"), TEXT("Jump"), TEXT("Dodge"), TEXT("Aim"), TEXT("Fire"), TEXT("Whip"), TEXT("Menu") };
 
 	FText Percent(float Value)
 	{

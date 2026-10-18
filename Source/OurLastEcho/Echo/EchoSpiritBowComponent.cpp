@@ -149,6 +149,8 @@ void UEchoSpiritBowComponent::SetupPlayerInput(UEnhancedInputComponent* Input)
 	Input->BindAction(Aim, ETriggerEvent::Completed, this, &UEchoSpiritBowComponent::OnAimCompleted);
 	Input->BindAction(Aim, ETriggerEvent::Canceled, this, &UEchoSpiritBowComponent::OnAimCompleted);
 	Input->BindAction(Shoot, ETriggerEvent::Started, this, &UEchoSpiritBowComponent::OnFirePressed);
+	Input->BindAction(Shoot, ETriggerEvent::Completed, this, &UEchoSpiritBowComponent::OnFireReleased);
+	Input->BindAction(Shoot, ETriggerEvent::Canceled, this, &UEchoSpiritBowComponent::OnFireReleased);
 
 	const APawn* Pawn = GetCharacter();
 	const APlayerController* PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
@@ -184,9 +186,33 @@ void UEchoSpiritBowComponent::OnAimCompleted()
 	}
 }
 
+float UEchoSpiritBowComponent::GetChargeFraction() const
+{
+	return bCharging ? FMath::Clamp((GetWorld()->GetTimeSeconds() - ChargeStartTime) / ChargeTime, 0.0f, 1.0f) : 0.0f;
+}
+
+int32 UEchoSpiritBowComponent::GetShotCount(EEchoAttackKind Kind) const
+{
+	const int32* Count = ShotCounts.Find(Kind);
+	return Count ? *Count : 0;
+}
+
 void UEchoSpiritBowComponent::OnFirePressed()
 {
-	Fire();
+	// Aiming: start drawing (a tap is an aimed shot, a hold a charged one). Not aiming: a quick shot
+	if (bAiming)
+	{
+		BeginCharge();
+	}
+	else
+	{
+		QuickShot();
+	}
+}
+
+void UEchoSpiritBowComponent::OnFireReleased()
+{
+	ReleaseCharge();
 }
 
 void UEchoSpiritBowComponent::SetAiming(bool bNewAiming)
@@ -197,6 +223,11 @@ void UEchoSpiritBowComponent::SetAiming(bool bNewAiming)
 	}
 
 	bAiming = bNewAiming;
+	if (!bAiming)
+	{
+		// Letting go of aim drops a drawn shot
+		bCharging = false;
+	}
 	ApplyAimState();
 
 	if (!GetOwner()->HasAuthority())
@@ -269,10 +300,124 @@ float UEchoSpiritBowComponent::GetCooldownReadiness() const
 bool UEchoSpiritBowComponent::Fire()
 {
 	AOurLastEchoCharacter* Character = GetCharacter();
-	if (!Character || !CanUseBow() || !bAiming || GetCooldownReadiness() < 1.0f)
+	if (!Character || !CanUseBow() || !bAiming || GetCooldownReadiness() < 1.0f || Character->IsDowned())
 	{
 		return false;
 	}
+	SendShot(GetAimTarget(), EEchoAttackKind::AimedShot);
+	return true;
+}
+
+bool UEchoSpiritBowComponent::QuickShot()
+{
+	AOurLastEchoCharacter* Character = GetCharacter();
+	if (!Character || !CanUseBow() || Character->IsDowned() || GetWorld()->GetTimeSeconds() - LastFireTime < QuickShotCooldown)
+	{
+		return false;
+	}
+	SendShot(GetAimTarget(), EEchoAttackKind::QuickShot);
+	return true;
+}
+
+bool UEchoSpiritBowComponent::BeginCharge()
+{
+	AOurLastEchoCharacter* Character = GetCharacter();
+	if (!Character || !CanUseBow() || !bAiming || bCharging || Character->IsDowned() || GetCooldownReadiness() < 1.0f)
+	{
+		return false;
+	}
+	bCharging = true;
+	ChargeStartTime = GetWorld()->GetTimeSeconds();
+	if (Character->HasAuthority())
+	{
+		ServerChargeStartTime = ChargeStartTime;
+	}
+	else
+	{
+		ServerBeginCharge();
+	}
+	return true;
+}
+
+void UEchoSpiritBowComponent::ServerBeginCharge_Implementation()
+{
+	ServerChargeStartTime = GetWorld()->GetTimeSeconds();
+}
+
+bool UEchoSpiritBowComponent::ReleaseCharge()
+{
+	if (!bCharging)
+	{
+		return false;
+	}
+	bCharging = false;
+	const AOurLastEchoCharacter* Character = GetCharacter();
+	if (!Character || !bAiming || Character->IsDowned())
+	{
+		return false;
+	}
+	const float Held = GetWorld()->GetTimeSeconds() - ChargeStartTime;
+	SendShot(GetAimTarget(), Held >= ChargeTime ? EEchoAttackKind::ChargedShot : EEchoAttackKind::AimedShot);
+	return true;
+}
+
+void UEchoSpiritBowComponent::SendShot(const FVector& Target, EEchoAttackKind Kind)
+{
+	AOurLastEchoCharacter* Character = GetCharacter();
+	LastFireTime = GetWorld()->GetTimeSeconds();
+
+	// A small kick on the archer's own camera (scaled by Reduce Camera Shake); bigger for a charged shot
+	UEchoCameraShake::Play(Cast<APlayerController>(Character->GetController()), Kind == EEchoAttackKind::ChargedShot ? 1.8f : Kind == EEchoAttackKind::QuickShot ? 0.6f : 1.0f);
+
+	if (Character->HasAuthority())
+	{
+		FireShotAt(Target, Kind);
+	}
+	else
+	{
+		ServerFireShot(Target, Kind);
+	}
+}
+
+void UEchoSpiritBowComponent::ServerFireShot_Implementation(FVector_NetQuantize TargetPoint, EEchoAttackKind Kind)
+{
+	const AOurLastEchoCharacter* Character = GetCharacter();
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float SinceLast = Now - LastFireTime;
+	if (!Character || Character->IsDowned())
+	{
+		return;
+	}
+	switch (Kind)
+	{
+	case EEchoAttackKind::QuickShot:
+		if (SinceLast < QuickShotCooldown * ServerCooldownTolerance)
+		{
+			return;
+		}
+		break;
+	case EEchoAttackKind::ChargedShot:
+		// The server saw the draw start; too short a draw is an aimed shot
+		if (Now - ServerChargeStartTime < ChargeTime * 0.75f)
+		{
+			Kind = EEchoAttackKind::AimedShot;
+		}
+		// fall through: aimed and charged shots both need aiming
+	case EEchoAttackKind::AimedShot:
+		if (!bAiming || SinceLast < FMath::Min(Cooldown, QuickShotCooldown) * ServerCooldownTolerance)
+		{
+			return;
+		}
+		break;
+	default:
+		return;
+	}
+	FireShotAt(TargetPoint, Kind);
+}
+
+FVector UEchoSpiritBowComponent::GetAimTarget() const
+{
+	AOurLastEchoCharacter* Character = GetCharacter();
 
 	// Aim through the camera: whatever the reticle is on, up to Range away
 	FVector ViewLocation;
@@ -295,22 +440,7 @@ bool UEchoSpiritBowComponent::Fire()
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SpiritBowAim), false, Character);
 	FHitResult Hit;
 	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_EchoArrow, Params);
-	const FVector Target = bHit ? Hit.ImpactPoint : TraceEnd;
-
-	LastFireTime = GetWorld()->GetTimeSeconds();
-
-	// A small kick on the archer's own camera (scaled by Reduce Camera Shake)
-	UEchoCameraShake::Play(Cast<APlayerController>(Character->GetController()), 1.0f);
-
-	if (Character->HasAuthority())
-	{
-		FireAt(Target);
-	}
-	else
-	{
-		ServerFire(Target);
-	}
-	return true;
+	return bHit ? Hit.ImpactPoint : TraceEnd;
 }
 
 void UEchoSpiritBowComponent::ServerFire_Implementation(FVector_NetQuantize TargetPoint)
@@ -325,22 +455,29 @@ void UEchoSpiritBowComponent::ServerFire_Implementation(FVector_NetQuantize Targ
 
 AEchoArrow* UEchoSpiritBowComponent::FireAt(FVector TargetPoint)
 {
+	return FireShotAt(TargetPoint, EEchoAttackKind::AimedShot);
+}
+
+AEchoArrow* UEchoSpiritBowComponent::FireShotAt(FVector TargetPoint, EEchoAttackKind Kind)
+{
 	AOurLastEchoCharacter* Character = GetCharacter();
 	if (!Character || !Character->HasAuthority() || !CanUseBow() || !ArrowClass)
 	{
 		return nullptr;
 	}
 
+	const float Speed = Kind == EEchoAttackKind::QuickShot ? QuickShotSpeed : Kind == EEchoAttackKind::ChargedShot ? ChargedShotSpeed : ArrowSpeed;
+
 	// Leave from in front of the chest, facing where the player is looking
 	const FRotator Facing(0.0f, Character->GetControlRotation().Yaw, 0.0f);
 	const FVector Start = Character->GetActorLocation() + Facing.RotateVector(MuzzleOffset);
 
 	// Correct the launch angle for the arc so the arrow still lands where the reticle was
-	FVector Velocity = (TargetPoint - Start).GetSafeNormal() * ArrowSpeed;
+	FVector Velocity = (TargetPoint - Start).GetSafeNormal() * Speed;
 	if (ArrowGravityScale > KINDA_SMALL_NUMBER)
 	{
 		const float GravityZ = GetWorld()->GetGravityZ() * ArrowGravityScale;
-		UGameplayStatics::FSuggestProjectileVelocityParameters Params(this, Start, TargetPoint, ArrowSpeed);
+		UGameplayStatics::FSuggestProjectileVelocityParameters Params(this, Start, TargetPoint, Speed);
 		Params.OverrideGravityZ = GravityZ;
 		Params.TraceOption = ESuggestProjVelocityTraceOption::DoNotTrace;
 		FVector Suggested;
@@ -355,12 +492,16 @@ AEchoArrow* UEchoSpiritBowComponent::FireAt(FVector TargetPoint)
 	SpawnParams.Instigator = Character;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AEchoArrow* Arrow = GetWorld()->SpawnActor<AEchoArrow>(ArrowClass, Start, Velocity.Rotation(), SpawnParams);
+	AEchoArrow* Arrow = GetWorld()->SpawnActorDeferred<AEchoArrow>(ArrowClass, FTransform(Velocity.Rotation(), Start), Character, Character, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (Arrow)
 	{
+		const float Damage = Kind == EEchoAttackKind::QuickShot ? QuickShotDamage : Kind == EEchoAttackKind::ChargedShot ? ChargedShotDamage : AimedShotDamage;
+		Arrow->SetShot(Kind, Damage, Kind == EEchoAttackKind::ChargedShot);
+		Arrow->FinishSpawning(FTransform(Velocity.Rotation(), Start));
 		Arrow->Launch(Velocity, ArrowGravityScale);
 	}
 
+	ShotCounts.FindOrAdd(Kind)++;
 	LastFireTime = GetWorld()->GetTimeSeconds();
 	return Arrow;
 }

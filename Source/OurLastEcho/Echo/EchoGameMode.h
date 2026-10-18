@@ -6,6 +6,8 @@
 #include "OurLastEchoGameMode.h"
 #include "EchoGameMode.generated.h"
 
+class AOurLastEchoCharacter;
+
 /**
  *  Co-op game mode: the first player to join plays Bat, everyone after plays Saraa (swapped with bHostPlaysSaraa).
  *  Pawn and controller classes are assigned in BP_EchoGameMode.
@@ -47,10 +49,48 @@ public:
 	 */
 	void SetPlayerInPauseMenu(APlayerController* PlayerController, bool bOpen);
 
+	// ---- Combat (Milestone 8)
+
+	/** A player went down. If both are down: the arena restarts (or both go back to their checkpoints) */
+	void HandlePlayerDowned(AOurLastEchoCharacter* Character);
+
+	/** A downed player's respawn delay is over: revive them beside the other player */
+	void RespawnDownedPlayer(AOurLastEchoCharacter* Character);
+
+	/** Seconds after both players are down before the arena restarts */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Echo|Combat", meta = (ClampMin = 0))
+	float AllDownRestartDelay = 2.5f;
+
+	// ---- Travelling between levels together (the combat door)
+
+	/**
+	 *  Takes both players to another level. Online (EOS) it's a seamless travel, so the peer-to-peer connection and
+	 *  the session (and voice) stay up; on LAN and in Play-In-Editor a normal server travel. Players arrive at the
+	 *  PlayerStarts tagged ArrivalTag + "_Bat" / "_Saraa" (the level's own starts if there are none)
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Echo|Travel")
+	bool TravelBothTo(const FString& MapPath, FName ArrivalTag);
+
+	UFUNCTION(BlueprintPure, Category="Echo|Travel")
+	bool IsTravelling() const { return bTravelling; }
+
+	/** Is this controller the one who plays Bat (the host, unless roles are swapped)? */
+	bool IsBatController(const AController* Controller) const;
+
+	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
+
 protected:
 
 	bool CanUnpauseMenu() const;
 	void RefreshMenuPause();
+	void RestartAfterAllDown();
 
 	TArray<TWeakObjectPtr<APlayerController>> PlayersInPauseMenu;
+
+	/** Where players arrive (from the travel URL's ?EchoArrive=) */
+	FName ArrivalTag;
+
+	bool bTravelling = false;
+	FTimerHandle AllDownTimer;
 };

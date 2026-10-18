@@ -60,6 +60,8 @@ public:
 	typedef FSavedMove_Character Super;
 
 	bool bSavedWantsToSwing = false;
+	/** A dodge roll was asked for this move (Milestone 8) */
+	bool bSavedWantsToDodge = false;
 	FVector SavedSwingAnchor = FVector::ZeroVector;
 	float SavedSwingRopeLength = 0.0f;
 
@@ -171,6 +173,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Echo|Swing")
 	bool IsLaunchedFromSwing() const { return bLaunchedFromSwing; }
 
+	/** In a dodge roll's burst (momentum kept until landing) */
+	UFUNCTION(BlueprintPure, Category="Echo|Dodge")
+	bool IsDodging() const { return bDodging; }
+
+	/** Dodge input (saved move, FLAG_Custom_1): roll on the next update. Set by UEchoPlayerCombatComponent::RequestDodge */
+	bool bWantsToDodge = false;
+
 	// Saved-move input state (see FEchoSavedMove)
 	bool bWantsToSwing = false;
 	FVector SwingAnchorRequest = FVector::ZeroVector;
@@ -189,6 +198,12 @@ protected:
 
 	/** Leaves the swing into falling, optionally with the release boost */
 	void EndSwing(bool bLaunch);
+
+	/** Starts a dodge roll if allowed (same rules on client and server) */
+	void TryDodge();
+
+	/** In a dodge roll's burst: no falling braking until landing */
+	bool bDodging = false;
 
 	/** The anchor point whose swing point is within a small tolerance of Point */
 	AEchoAnchorPoint* FindAnchorNear(const FVector& Point) const;

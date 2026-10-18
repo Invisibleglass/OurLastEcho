@@ -51,4 +51,16 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Echo|Editor", meta=(DevelopmentOnly))
 	static UObject* CreateNiagaraSystemFromEmitter(const FString& AssetPath, const FString& EmitterPath, UMaterialInterface* SpriteMaterial);
+
+	/**
+	 *  Creates (or rebuilds) the enemy StateTree (Milestone 8), for the AI component schema:
+	 *  Root > Stunned [Echo Enemy Check: Is Stunned] | Attack [Can Attack] | Chase [Has Target] | Idle, each with its
+	 *  Echo Enemy Task and a "completed -> Root" transition. Compiled; the caller saves the asset.
+	 *  A real StateTree asset: open it in the StateTree editor to change it. Python can't build one otherwise.
+	 *
+	 *  @param AssetPath  e.g. /Game/Echo/Combat/ST_EchoEnemy
+	 *  @return The StateTree, or null if it didn't compile
+	 */
+	UFUNCTION(BlueprintCallable, Category="Echo|Editor", meta=(DevelopmentOnly))
+	static UObject* BuildEnemyStateTree(const FString& AssetPath);
 };

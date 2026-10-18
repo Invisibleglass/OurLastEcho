@@ -12,6 +12,7 @@
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 #include "EchoAnchorable.h"
+#include "EchoHealthComponent.h"
 #include "EchoPlatform.h"
 #include "EchoSpiritBowComponent.h"
 #include "OurLastEchoCharacter.h"
@@ -117,6 +118,19 @@ void AEchoArrow::BeginPlay()
 		SetLifeSpan(FlightLifetime);
 	}
 
+	// A charged arrow is bigger and blazes; a quick one is slimmer
+	if (ShotKind == EEchoAttackKind::ChargedShot)
+	{
+		Shaft->SetRelativeScale3D(Shaft->GetRelativeScale3D() * FVector(1.8f, 1.8f, 1.15f));
+		Tip->SetRelativeScale3D(Tip->GetRelativeScale3D() * 1.7f);
+		Glow->SetIntensity(Glow->Intensity * 3.0f);
+	}
+	else if (ShotKind == EEchoAttackKind::QuickShot)
+	{
+		Shaft->SetRelativeScale3D(Shaft->GetRelativeScale3D() * FVector(0.8f, 0.8f, 0.85f));
+		Glow->SetIntensity(Glow->Intensity * 0.6f);
+	}
+
 	if (GetNetMode() != NM_DedicatedServer)
 	{
 		UStaticMesh* CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
@@ -167,10 +181,42 @@ void AEchoArrow::OnRep_Launch()
 	Movement->UpdateComponentVelocity();
 }
 
+void AEchoArrow::SetShot(EEchoAttackKind Kind, float Damage, bool bHeavy)
+{
+	ShotKind = Kind;
+	ShotDamage = Damage;
+	bShotHeavy = bHeavy;
+}
+
 void AEchoArrow::OnArrowStop(const FHitResult& ImpactResult)
 {
 	const FVector Direction = GetActorForwardVector();
 	Stick();
+
+	// An arrow that bounced off a shell just drops; it doesn't wake platforms or make anchors
+	if (bDeflected)
+	{
+		if (HasAuthority())
+		{
+			bStuck = true;
+			SetLifeSpan(1.0f);
+		}
+		return;
+	}
+
+	// Hit an enemy (Milestone 8): it doesn't stay stuck in mid-air; the server decides what the hit did
+	AActor* HitActor = ImpactResult.GetActor();
+	if (HitActor && HitActor != GetInstigator() && UEchoHealthComponent::FindOn(HitActor))
+	{
+		Shaft->SetVisibility(false);
+		Tip->SetVisibility(false);
+		if (HasAuthority())
+		{
+			bStuck = true;
+			HitHealthActor(HitActor, ImpactResult, Direction);
+		}
+		return;
+	}
 
 	if (GetNetMode() != NM_DedicatedServer)
 	{
@@ -205,6 +251,51 @@ void AEchoArrow::OnArrowStop(const FHitResult& ImpactResult)
 			}
 		}
 	}
+}
+
+void AEchoArrow::HitHealthActor(AActor* Target, const FHitResult& Impact, const FVector& Direction)
+{
+	UEchoHealthComponent* Health = UEchoHealthComponent::FindOn(Target);
+	FEchoDamageInfo Info;
+	Info.Amount = ShotDamage;
+	Info.Kind = ShotKind;
+	Info.bHeavy = bShotHeavy;
+	Info.Instigator = GetInstigator();
+	Info.HitLocation = Impact.ImpactPoint;
+	Info.Direction = Direction;
+	const EEchoDamageResult Result = Health->ApplyDamage(Info);
+	UE_LOG(LogOurLastEcho, Log, TEXT("%s (%s) hit %s: result %d"), *GetName(), *UEnum::GetValueAsString(ShotKind), *Target->GetName(), static_cast<int32>(Result));
+
+	if (Result == EEchoDamageResult::Blocked)
+	{
+		// Bounces off (a Stone Guardian's shell): back and up, falling
+		bStuck = false;
+		bDeflected = true;
+		DeflectVelocity = (-Direction * 700.0f + FVector(FMath::FRandRange(-250.0f, 250.0f), FMath::FRandRange(-250.0f, 250.0f), 450.0f));
+		OnRep_Deflected();
+		SetLifeSpan(1.6f);
+	}
+	else
+	{
+		SetLifeSpan(0.1f);
+	}
+	ForceNetUpdate();
+}
+
+void AEchoArrow::OnRep_Deflected()
+{
+	if (!bDeflected)
+	{
+		return;
+	}
+	Shaft->SetVisibility(true);
+	Tip->SetVisibility(true);
+	// Don't catch the same hit box again on the way out
+	Collision->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
+	Movement->SetActive(true);
+	Movement->ProjectileGravityScale = 1.0f;
+	Movement->Velocity = DeflectVelocity;
+	Movement->UpdateComponentVelocity();
 }
 
 void AEchoArrow::OnRep_Stuck()
@@ -282,4 +373,7 @@ void AEchoArrow::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifeti
 	DOREPLIFETIME_CONDITION(AEchoArrow, LaunchVelocity, COND_InitialOnly);
 	DOREPLIFETIME_CONDITION(AEchoArrow, LaunchGravityScale, COND_InitialOnly);
 	DOREPLIFETIME(AEchoArrow, bStuck);
+	DOREPLIFETIME_CONDITION(AEchoArrow, ShotKind, COND_InitialOnly);
+	DOREPLIFETIME(AEchoArrow, DeflectVelocity);
+	DOREPLIFETIME(AEchoArrow, bDeflected);
 }

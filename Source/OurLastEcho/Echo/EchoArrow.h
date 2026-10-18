@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "EchoCombatTypes.h"
 #include "EchoArrow.generated.h"
 
 class USphereComponent;
@@ -100,6 +101,27 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_Stuck)
 	bool bStuck = false;
 
+	/** Which shot (replicated at spawn: a charged arrow is bigger and brighter) */
+	UPROPERTY(Replicated)
+	EEchoAttackKind ShotKind = EEchoAttackKind::AimedShot;
+
+	/** Server: damage to an enemy it hits */
+	float ShotDamage = 20.0f;
+	bool bShotHeavy = false;
+
+	/** The server bounced it off a shell: every machine flies it away on this velocity */
+	UPROPERTY(ReplicatedUsing = OnRep_Deflected)
+	FVector_NetQuantize10 DeflectVelocity;
+
+	UPROPERTY(Replicated)
+	bool bDeflected = false;
+
+	UFUNCTION()
+	void OnRep_Deflected();
+
+	/** Server: hit an enemy (or anything with health) */
+	void HitHealthActor(AActor* Target, const FHitResult& Impact, const FVector& Direction);
+
 	/** Trail ring buffer */
 	TArray<FVector> TrailPoints;
 	float TrailTimer = 0.0f;
@@ -110,6 +132,16 @@ public:
 
 	/** Server: sets the flight. Call right after spawning */
 	void Launch(const FVector& Velocity, float GravityScale);
+
+	/** Server, before FinishSpawning: what kind of shot this is and what it does to an enemy (Milestone 8) */
+	void SetShot(EEchoAttackKind Kind, float Damage, bool bHeavy);
+
+	UFUNCTION(BlueprintPure, Category="Arrow")
+	EEchoAttackKind GetShotKind() const { return ShotKind; }
+
+	/** Bounced off something it couldn't hurt (a Stone Guardian's shell) */
+	UFUNCTION(BlueprintPure, Category="Arrow")
+	bool IsDeflected() const { return bDeflected; }
 
 	virtual void Tick(float DeltaSeconds) override;
 

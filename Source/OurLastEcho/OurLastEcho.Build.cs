@@ -35,15 +35,19 @@ public class OurLastEcho : ModuleRules
 		// Epic Online Services (Milestone 7): the EOS online subsystem's voice chat user, for push-to-talk and the speaking indicator
 		PrivateDependencyModuleNames.AddRange(new string[] { "OnlineSubsystemEOS", "VoiceChat" });
 
+		// Combat (Milestone 8): enemy brains (StateTree on an AI controller, AI Perception)
+		PrivateDependencyModuleNames.AddRange(new string[] { "GameplayTasks", "NavigationSystem" });
+
 		// Editor-only builder helpers (EchoEditorLibrary)
 		if (Target.bBuildEditor)
 		{
-			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "NiagaraEditor" });
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "NiagaraEditor", "StateTreeEditorModule", "PropertyBindingUtils" });
 		}
 
 		PublicIncludePaths.AddRange(new string[] {
 			"OurLastEcho",
 			"OurLastEcho/Echo",
+			"OurLastEcho/Echo/Combat",
 			"OurLastEcho/Echo/Eras",
 			"OurLastEcho/Echo/FrontEnd",
 			"OurLastEcho/Echo/Online",

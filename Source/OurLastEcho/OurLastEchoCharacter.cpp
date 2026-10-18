@@ -17,6 +17,8 @@
 #include "EchoGameUserSettings.h"
 #include "EchoCharacterMovementComponent.h"
 #include "EchoVisibility.h"
+#include "EchoHealthComponent.h"
+#include "EchoPlayerCombatComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "TimerManager.h"
 
@@ -59,6 +61,10 @@ AOurLastEchoCharacter::AOurLastEchoCharacter(const FObjectInitializer& ObjectIni
 
 	SpiritBow = CreateDefaultSubobject<UEchoSpiritBowComponent>(TEXT("SpiritBow"));
 	SwordWhip = CreateDefaultSubobject<UEchoSwordWhipComponent>(TEXT("SwordWhip"));
+	Health = CreateDefaultSubobject<UEchoHealthComponent>(TEXT("Health"));
+	Health->Team = EEchoTeam::Players;
+	Health->HitSound = EchoCombat::EngineSound(TEXT("VR_ungrab"));
+	PlayerCombat = CreateDefaultSubobject<UEchoPlayerCombatComponent>(TEXT("PlayerCombat"));
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
@@ -163,6 +169,11 @@ UEchoCharacterMovementComponent* AOurLastEchoCharacter::GetEchoMovement() const
 	return CastChecked<UEchoCharacterMovementComponent>(GetCharacterMovement());
 }
 
+bool AOurLastEchoCharacter::IsDowned() const
+{
+	return PlayerCombat && PlayerCombat->IsDowned();
+}
+
 void AOurLastEchoCharacter::RequestShowAllPlatforms(bool bShow)
 {
 	if (HasAuthority())
@@ -190,7 +201,7 @@ void AOurLastEchoCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
 		
 		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AOurLastEchoCharacter::DoJumpStart);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
 		// Moving
@@ -205,6 +216,9 @@ void AOurLastEchoCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 
 		// Sword whip (only binds for Saraa)
 		SwordWhip->SetupPlayerInput(EnhancedInputComponent);
+
+		// Dodge roll (both)
+		PlayerCombat->SetupPlayerInput(EnhancedInputComponent);
 	}
 	else
 	{
@@ -251,7 +265,8 @@ void AOurLastEchoCharacter::ApplyLook(FVector2D LookAxisVector, bool bGamepad)
 
 void AOurLastEchoCharacter::DoMove(float Right, float Forward)
 {
-	if (GetController() != nullptr)
+	// Down: no moving until revived
+	if (GetController() != nullptr && !IsDowned())
 	{
 		// find out which way is forward
 		const FRotator Rotation = GetController()->GetControlRotation();
@@ -281,8 +296,11 @@ void AOurLastEchoCharacter::DoLook(float Yaw, float Pitch)
 
 void AOurLastEchoCharacter::DoJumpStart()
 {
-	// signal the character to jump
-	Jump();
+	// signal the character to jump (not while down)
+	if (!IsDowned())
+	{
+		Jump();
+	}
 }
 
 void AOurLastEchoCharacter::DoJumpEnd()

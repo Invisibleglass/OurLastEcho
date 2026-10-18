@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "EchoCombatTypes.h"
 #include "EchoSpiritBowComponent.generated.h"
 
 class AEchoArrow;
@@ -60,6 +61,37 @@ public:
 	/** Where arrows leave from, relative to the character (X forward, Y right, Z up) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Arrow")
 	FVector MuzzleOffset = FVector(70.0f, 15.0f, 45.0f);
+
+	// ---- Combat shots (Milestone 8): Fire without aiming = quick shot; while aiming, tap = aimed shot, hold = charged shot
+
+	/** Quick shot (Fire without aiming): fast and weaker */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Combat", meta = (ClampMin = 0))
+	float QuickShotDamage = 10.0f;
+
+	/** Seconds between quick shots */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Combat", meta = (ClampMin = 0))
+	float QuickShotCooldown = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Combat", meta = (ClampMin = 100))
+	float QuickShotSpeed = 3800.0f;
+
+	/** Aimed shot (a tap of Fire while aiming): the normal arrow */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Combat", meta = (ClampMin = 0))
+	float AimedShotDamage = 20.0f;
+
+	/** Charged shot (Fire held while aiming): the bow draws for this long, in seconds */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Combat", meta = (ClampMin = 0.1))
+	float ChargeTime = 1.0f;
+
+	/** Held shorter than this, it's a normal aimed shot */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Combat", meta = (ClampMin = 0))
+	float ChargeMinHold = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Combat", meta = (ClampMin = 0))
+	float ChargedShotDamage = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spirit Bow|Combat", meta = (ClampMin = 100))
+	float ChargedShotSpeed = 6000.0f;
 
 	// ---- Anchor arrows
 
@@ -147,6 +179,33 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Spirit Bow")
 	AEchoArrow* FireAt(FVector TargetPoint);
 
+	/** Server: fires a given kind of shot (quick, aimed or charged) at a world point */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Spirit Bow|Combat")
+	AEchoArrow* FireShotAt(FVector TargetPoint, EEchoAttackKind Kind);
+
+	/** Fires a quick shot where the camera points (owning client or host). False while cooling down */
+	UFUNCTION(BlueprintCallable, Category="Spirit Bow|Combat")
+	bool QuickShot();
+
+	/** Starts drawing a charged shot (while aiming) */
+	UFUNCTION(BlueprintCallable, Category="Spirit Bow|Combat")
+	bool BeginCharge();
+
+	/** Lets the drawn shot go: an aimed shot if held briefly, a charged shot if held ChargeTime */
+	UFUNCTION(BlueprintCallable, Category="Spirit Bow|Combat")
+	bool ReleaseCharge();
+
+	UFUNCTION(BlueprintPure, Category="Spirit Bow|Combat")
+	bool IsCharging() const { return bCharging; }
+
+	/** 0..1 how far the charged shot is drawn (owner) */
+	UFUNCTION(BlueprintPure, Category="Spirit Bow|Combat")
+	float GetChargeFraction() const;
+
+	/** Shots the server has fired, by kind (for tests) */
+	UFUNCTION(BlueprintPure, Category="Spirit Bow|Combat")
+	int32 GetShotCount(EEchoAttackKind Kind) const;
+
 	/** Server: turns an arrow hit on an anchorable surface into an anchor point, removing the oldest if there are too many */
 	AEchoAnchorPoint* CreateAnchor(const FHitResult& Hit, const FVector& ArrowDirection);
 
@@ -174,6 +233,26 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerFire(FVector_NetQuantize TargetPoint);
+
+	UFUNCTION(Server, Reliable)
+	void ServerFireShot(FVector_NetQuantize TargetPoint, EEchoAttackKind Kind);
+
+	UFUNCTION(Server, Reliable)
+	void ServerBeginCharge();
+
+	void OnFireReleased();
+
+	/** Where the camera's reticle points (up to Range), for a shot */
+	FVector GetAimTarget() const;
+
+	/** Sends the shot to the server (or fires it on the host) */
+	void SendShot(const FVector& Target, EEchoAttackKind Kind);
+
+	bool bCharging = false;
+	float ChargeStartTime = 0.0f;
+	/** Server: when the client said it started drawing */
+	float ServerChargeStartTime = -1000.0f;
+	TMap<EEchoAttackKind, int32> ShotCounts;
 
 	UFUNCTION()
 	void OnRep_Aiming();

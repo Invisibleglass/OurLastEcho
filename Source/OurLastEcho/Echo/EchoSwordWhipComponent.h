@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "EchoCombatTypes.h"
 #include "EchoSwordWhipComponent.generated.h"
 
 class AEchoAnchorPoint;
@@ -145,6 +146,54 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Lash", meta = (ClampMin = 0))
 	float LashCooldown = 0.6f;
 
+	// ---- Combat (Milestone 8). The whip button with no anchor targeted: tap = light combo, hold = charged lash
+
+	/** Damage of light lashes 1 and 2 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0))
+	float LightLashDamage = 12.0f;
+
+	/** The combo's third lash: more damage and a much wider sweep */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0))
+	float FinisherDamage = 20.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 1))
+	float FinisherRadius = 110.0f;
+
+	/** The next tap within this many seconds of a lash continues the combo */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0))
+	float ComboWindow = 0.75f;
+
+	/** Seconds between combo lashes */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0))
+	float ComboLashInterval = 0.22f;
+
+	/** Recovery after the finisher before the next lash */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0))
+	float FinisherRecovery = 0.55f;
+
+	/** Held longer than this, the whip charges instead of lashing */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0.05))
+	float ChargeThreshold = 0.35f;
+
+	/** Seconds to a full charge (from the press) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0.1))
+	float FullChargeTime = 1.1f;
+
+	/** Damage of a fully charged lash (a partly charged one does half to all of it) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0))
+	float ChargedLashDamage = 40.0f;
+
+	/** The charged lash's long reach, in cm */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 50))
+	float ChargedLashRange = 780.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 1))
+	float ChargedLashRadius = 55.0f;
+
+	/** Recovery after a charged lash */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sword Whip|Combat", meta = (ClampMin = 0))
+	float ChargedRecovery = 0.8f;
+
 public:
 
 	UEchoSwordWhipComponent();
@@ -187,6 +236,31 @@ public:
 	/** Lashes the server has done for this character (for tests) */
 	UFUNCTION(BlueprintPure, Category="Sword Whip|Lash")
 	int32 GetLashCount() const { return LashCount; }
+
+	/** A combat lash of a given kind (light, finisher, charged) in a direction; ChargeAlpha 0..1 for a charged lash.
+	 *  Call on the owning client (or the host's own character). False while recovering */
+	UFUNCTION(BlueprintCallable, Category="Sword Whip|Combat")
+	bool LashOfKind(FVector Direction, EEchoAttackKind Kind, float ChargeAlpha = 1.0f);
+
+	/** The next lash of the light combo where the camera looks (lash 1, 2, then the wide finisher) */
+	UFUNCTION(BlueprintCallable, Category="Sword Whip|Combat")
+	bool ComboLash();
+
+	/** Holding the whip button for a charged lash (owner) */
+	UFUNCTION(BlueprintPure, Category="Sword Whip|Combat")
+	bool IsChargingLash() const;
+
+	/** 0..1 charge of a held lash (owner) */
+	UFUNCTION(BlueprintPure, Category="Sword Whip|Combat")
+	float GetLashChargeFraction() const;
+
+	/** The kind of the last lash (every machine) */
+	UFUNCTION(BlueprintPure, Category="Sword Whip|Combat")
+	EEchoAttackKind GetLastLashKind() const { return LashKind; }
+
+	/** Combat lashes the server has done, by kind (for tests) */
+	UFUNCTION(BlueprintPure, Category="Sword Whip|Combat")
+	int32 GetLashKindCount(EEchoAttackKind Kind) const;
 
 	/** Called by the character from SetupPlayerInputComponent */
 	void SetupPlayerInput(UEnhancedInputComponent* Input);
@@ -245,10 +319,29 @@ protected:
 	int32 LatchCount = 0;
 
 	UFUNCTION(Server, Reliable)
-	void ServerLash(FVector_NetQuantizeNormal Direction);
+	void ServerLash(FVector_NetQuantizeNormal Direction, EEchoAttackKind Kind, float ChargeAlpha);
 
 	/** Server: counts the lash, replicates it for the look, and sweeps for things to hit */
-	void DoLash(const FVector& Direction);
+	void DoLash(const FVector& Direction, EEchoAttackKind Kind, float ChargeAlpha);
+
+	/** Seconds before another lash may follow a lash of this kind */
+	float GetRecoveryAfter(EEchoAttackKind Kind) const;
+
+	/** Kind of the last lash, for the look on every machine */
+	UPROPERTY(Replicated)
+	EEchoAttackKind LashKind = EEchoAttackKind::WhipLight;
+
+	/** Light combo: which lash comes next (owner) */
+	int32 ComboIndex = 0;
+
+	/** When the next lash may come (owner and server) */
+	float NextLashTime = 0.0f;
+
+	/** Holding the whip button with no anchor: tap or charge (owner) */
+	bool bAttackHeld = false;
+	float AttackPressTime = 0.0f;
+
+	TMap<EEchoAttackKind, int32> LashKindCounts;
 
 	/** The lash's look on this machine */
 	void StartLashLook(const FVector& Direction);

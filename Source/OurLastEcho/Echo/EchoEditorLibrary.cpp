@@ -4,12 +4,81 @@
 #include "OurLastEcho.h"
 
 #if WITH_EDITOR
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Components/StateTreeAIComponentSchema.h"
 #include "Editor.h"
 #include "Landscape.h"
 #include "LandscapeDataAccess.h"
 #include "LandscapeInfo.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/PackageName.h"
+#include "StateTree.h"
+#include "StateTreeCompilerLog.h"
+#include "StateTreeEditingSubsystem.h"
+#include "StateTreeEditorData.h"
+#include "StateTreeEditorModule.h"
+#include "StateTreeEditorSchema.h"
+#include "StateTreeState.h"
+#include "UObject/Package.h"
+#include "EchoEnemyStateTree.h"
 #endif
+
+UObject* UEchoEditorLibrary::BuildEnemyStateTree(const FString& AssetPath)
+{
+#if WITH_EDITOR
+	const FString Name = FPackageName::GetLongPackageAssetName(AssetPath);
+	UPackage* Package = CreatePackage(*AssetPath);
+	Package->FullyLoad();
+	UStateTree* Tree = FindObject<UStateTree>(Package, *Name);
+	const bool bNew = Tree == nullptr;
+	if (!Tree)
+	{
+		Tree = NewObject<UStateTree>(Package, *Name, RF_Public | RF_Standalone | RF_Transactional);
+	}
+
+	// Fresh editor data for the AI component schema (what UStateTreeFactory does for a new asset)
+	const TSubclassOf<UStateTreeSchema> SchemaClass = UStateTreeAIComponentSchema::StaticClass();
+	FStateTreeEditorModule& EditorModule = FStateTreeEditorModule::GetModule();
+	UStateTreeEditorData* EditorData = NewObject<UStateTreeEditorData>(Tree, EditorModule.GetEditorDataClass(SchemaClass.Get()), NAME_None, RF_Transactional);
+	Tree->EditorData = EditorData;
+	EditorData->Schema = NewObject<UStateTreeSchema>(EditorData, SchemaClass, NAME_None, RF_Transactional);
+	EditorData->EditorSchema = NewObject<UStateTreeEditorSchema>(EditorData, EditorModule.GetEditorSchemaClass(SchemaClass.Get()), NAME_None, RF_Transactional);
+
+	// Root picks the first child whose condition holds; every child goes back to Root when its task finishes
+	UStateTreeState& Root = EditorData->AddRootState();
+	auto AddState = [&Root](const TCHAR* StateName, const TOptional<EEchoEnemyCheck> Check, EEchoEnemyTaskKind Kind)
+	{
+		UStateTreeState& State = Root.AddChildState(FName(StateName));
+		if (Check.IsSet())
+		{
+			State.AddEnterCondition<FEchoEnemyCondition>(Check.GetValue());
+		}
+		State.AddTask<FEchoEnemyTask>(Kind);
+		State.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, &Root);
+	};
+	AddState(TEXT("Stunned"), EEchoEnemyCheck::IsStunned, EEchoEnemyTaskKind::Stunned);
+	AddState(TEXT("Attack"), EEchoEnemyCheck::CanAttack, EEchoEnemyTaskKind::Attack);
+	AddState(TEXT("Chase"), EEchoEnemyCheck::HasTarget, EEchoEnemyTaskKind::Chase);
+	AddState(TEXT("Idle"), TOptional<EEchoEnemyCheck>(), EEchoEnemyTaskKind::Idle);
+
+	FStateTreeCompilerLog Log;
+	if (!UStateTreeEditingSubsystem::CompileStateTree(Tree, Log))
+	{
+		Log.DumpToLog(LogOurLastEcho);
+		UE_LOG(LogOurLastEcho, Error, TEXT("BuildEnemyStateTree: %s didn't compile"), *AssetPath);
+		return nullptr;
+	}
+	if (bNew)
+	{
+		FAssetRegistryModule::AssetCreated(Tree);
+	}
+	Tree->MarkPackageDirty();
+	UE_LOG(LogOurLastEcho, Log, TEXT("BuildEnemyStateTree: built %s"), *AssetPath);
+	return Tree;
+#else
+	return nullptr;
+#endif
+}
 
 ALandscape* UEchoEditorLibrary::CreateLandscapeFromHeights(FVector Location, FVector Scale, int32 ComponentCountX, int32 ComponentCountY,
 	int32 QuadsPerComponent, const TArray<float>& Heights, UMaterialInterface* Material, const FString& Label, FName Tag)

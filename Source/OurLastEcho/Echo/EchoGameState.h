@@ -28,6 +28,10 @@ protected:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="Echo|Debug")
 	bool bDebugShowAllPlatforms = false;
 
+	/** Debug: every enemy is shown to both players, whoever's world it's in (EchoShowAllEnemies) */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category="Echo|Debug")
+	bool bDebugShowAllEnemies = false;
+
 public:
 
 	/** Marks the milestone complete for everyone. Server only */
@@ -42,6 +46,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Echo|Debug")
 	bool IsDebugShowAllPlatforms() const { return bDebugShowAllPlatforms; }
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Echo|Debug")
+	void SetDebugShowAllEnemies(bool bShow) { bDebugShowAllEnemies = bShow; ForceNetUpdate(); }
+
+	UFUNCTION(BlueprintPure, Category="Echo|Debug")
+	bool IsDebugShowAllEnemies() const { return bDebugShowAllEnemies; }
 
 	/** Server only (AEchoGameMode keeps this up to date) */
 	void SetPlayersInPauseMenu(const TArray<APlayerState*>& Players);

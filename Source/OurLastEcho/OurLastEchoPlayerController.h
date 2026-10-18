@@ -94,6 +94,52 @@ public:
 	UFUNCTION(Exec)
 	void EchoShowBothEras();
 
+	// ---- Combat debug commands (Milestone 8); the server carries them out
+
+	/** God mode for your own character (again = off) */
+	UFUNCTION(Exec)
+	void EchoGod();
+
+	/** EchoSpawnEnemy wraith | shade | guardian | talon: spawns one a few metres in front of you */
+	UFUNCTION(Exec)
+	void EchoSpawnEnemy(const FString& Type);
+
+	/** Shows every enemy to both players, whoever's world it's in (again = off) */
+	UFUNCTION(Exec)
+	void EchoShowAllEnemies();
+
+	/** EchoSkipToWave 3: jumps the arena to that wave */
+	UFUNCTION(Exec)
+	void EchoSkipToWave(int32 Wave);
+
+	/** Restarts the arena (like the restart pad) */
+	UFUNCTION(Exec)
+	void EchoRestartArena();
+
+	/** EchoHurt 30: damages your own character (testing health, hurt reactions, going down) */
+	UFUNCTION(Exec)
+	void EchoHurt(float Amount);
+
+	/** EchoGoTo combat | back: takes both players through the combat door (or back) without walking there */
+	UFUNCTION(Exec)
+	void EchoGoTo(const FString& Where);
+
+	/** Tests and debugging: EchoShoot quick | aimed | charged, through the bow's own input path (charged waits out the draw) */
+	UFUNCTION(Exec)
+	void EchoShoot(const FString& Kind);
+
+	/** Tests and debugging: EchoLash combo | charged, through the whip's own input path (sends the server RPC) */
+	UFUNCTION(Exec)
+	void EchoLash(const FString& Kind);
+
+	/** Tests and debugging: a dodge roll, as the dodge key does */
+	UFUNCTION(Exec)
+	void EchoDodge();
+
+	/** Runs a combat debug command on the server (what the Echo... commands above call) */
+	UFUNCTION(Server, Reliable)
+	void ServerCombatDebug(const FString& Command, const FString& Argument);
+
 protected:
 
 	/** Gameplay initialization */

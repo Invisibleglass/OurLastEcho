@@ -5,6 +5,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "EchoAnchorPoint.h"
+#include "EchoPlayerCombatComponent.h"
 #include "EchoSwordWhipComponent.h"
 #include "OurLastEchoCharacter.h"
 #include "OurLastEcho.h"
@@ -99,6 +100,7 @@ void FEchoSavedMove::Clear()
 	Super::Clear();
 
 	bSavedWantsToSwing = false;
+	bSavedWantsToDodge = false;
 	SavedSwingAnchor = FVector::ZeroVector;
 	SavedSwingRopeLength = 0.0f;
 }
@@ -110,6 +112,7 @@ void FEchoSavedMove::SetMoveFor(ACharacter* C, float InDeltaTime, FVector const&
 	if (const UEchoCharacterMovementComponent* Movement = Cast<UEchoCharacterMovementComponent>(C->GetCharacterMovement()))
 	{
 		bSavedWantsToSwing = Movement->bWantsToSwing;
+		bSavedWantsToDodge = Movement->bWantsToDodge;
 		SavedSwingAnchor = Movement->SwingAnchorRequest;
 		SavedSwingRopeLength = Movement->SwingRopeRequest;
 	}
@@ -122,6 +125,7 @@ void FEchoSavedMove::PrepMoveFor(ACharacter* C)
 	if (UEchoCharacterMovementComponent* Movement = Cast<UEchoCharacterMovementComponent>(C->GetCharacterMovement()))
 	{
 		Movement->bWantsToSwing = bSavedWantsToSwing;
+		Movement->bWantsToDodge = bSavedWantsToDodge;
 		Movement->SwingAnchorRequest = SavedSwingAnchor;
 		Movement->SwingRopeRequest = SavedSwingRopeLength;
 	}
@@ -134,6 +138,10 @@ uint8 FEchoSavedMove::GetCompressedFlags() const
 	{
 		Flags |= FLAG_Custom_0;
 	}
+	if (bSavedWantsToDodge)
+	{
+		Flags |= FLAG_Custom_1;
+	}
 	return Flags;
 }
 
@@ -141,6 +149,7 @@ bool FEchoSavedMove::CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* In
 {
 	const FEchoSavedMove* Other = static_cast<const FEchoSavedMove*>(NewMove.Get());
 	if (bSavedWantsToSwing != Other->bSavedWantsToSwing
+		|| bSavedWantsToDodge || Other->bSavedWantsToDodge
 		|| !SavedSwingAnchor.Equals(Other->SavedSwingAnchor, 0.1f)
 		|| !FMath::IsNearlyEqual(SavedSwingRopeLength, Other->SavedSwingRopeLength, 0.1f))
 	{
@@ -153,7 +162,7 @@ bool FEchoSavedMove::IsImportantMove(const FSavedMovePtr& LastAckedMove) const
 {
 	// Latching and letting go must reach the server even if the packet carrying them is lost
 	const FEchoSavedMove* Acked = static_cast<const FEchoSavedMove*>(LastAckedMove.Get());
-	if (Acked && Acked->bSavedWantsToSwing != bSavedWantsToSwing)
+	if ((Acked && Acked->bSavedWantsToSwing != bSavedWantsToSwing) || bSavedWantsToDodge)
 	{
 		return true;
 	}
@@ -205,6 +214,7 @@ void UEchoCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
 	Super::UpdateFromCompressedFlags(Flags);
 
 	bWantsToSwing = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
+	bWantsToDodge = (Flags & FSavedMove_Character::FLAG_Custom_1) != 0;
 }
 
 void UEchoCharacterMovementComponent::MoveAutonomous(float ClientTimeStamp, float DeltaTime, uint8 CompressedFlags, const FVector& NewAccel)
@@ -302,6 +312,43 @@ void UEchoCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float D
 		// A request that can't be honoured is dropped, so it can't fire later when the anchor comes into range
 		UE_LOG(LogOurLastEcho, Verbose, TEXT("Swing: %s start refused at %s (anchor %s)"), SwingRole(CharacterOwner), *UpdatedComponent->GetComponentLocation().ToCompactString(), *SwingAnchorRequest.ToCompactString());
 		bWantsToSwing = false;
+	}
+
+	// A dodge roll is a one-move request: used (or refused) here, on the client, the server and in replays alike
+	if (bWantsToDodge)
+	{
+		bWantsToDodge = false;
+		TryDodge();
+	}
+}
+
+void UEchoCharacterMovementComponent::TryDodge()
+{
+	AOurLastEchoCharacter* Character = Cast<AOurLastEchoCharacter>(CharacterOwner);
+	UEchoPlayerCombatComponent* Combat = Character ? Character->GetPlayerCombat() : nullptr;
+	if (!Combat || Combat->IsDowned() || IsSwinging() || !IsMovingOnGround())
+	{
+		return;
+	}
+	// The server keeps its own cooldown (a refused roll is corrected on the client)
+	if (CharacterOwner->HasAuthority() && IsRealMove() && !Combat->CanServerDodge())
+	{
+		return;
+	}
+
+	// Roll the way the stick points, or straight ahead
+	FVector Direction = Acceleration.GetSafeNormal2D();
+	if (Direction.IsNearlyZero())
+	{
+		Direction = UpdatedComponent->GetForwardVector().GetSafeNormal2D();
+	}
+	Velocity = Direction * Combat->DodgeSpeed + FVector(0.0f, 0.0f, Combat->DodgeHop);
+	bDodging = true;
+	SetMovementMode(MOVE_Falling);
+
+	if (IsRealMove())
+	{
+		Combat->NotifyDodged();
 	}
 }
 
@@ -404,12 +451,16 @@ void UEchoCharacterMovementComponent::OnMovementModeChanged(EMovementMode Previo
 	{
 		bLaunchedFromSwing = false;
 	}
+	if (MovementMode != MOVE_Falling)
+	{
+		bDodging = false;
+	}
 }
 
 float UEchoCharacterMovementComponent::GetMaxBrakingDeceleration() const
 {
-	// Flying from a swing keeps its speed; air control can still steer
-	if (MovementMode == MOVE_Falling && bLaunchedFromSwing)
+	// Flying from a swing (or a dodge roll) keeps its speed; air control can still steer
+	if (MovementMode == MOVE_Falling && (bLaunchedFromSwing || bDodging))
 	{
 		return 0.0f;
 	}

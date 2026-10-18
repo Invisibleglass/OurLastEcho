@@ -11,7 +11,13 @@
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
+#include "EchoArenaManager.h"
 #include "EchoEraDirector.h"
+#include "EchoGameState.h"
+#include "EchoHealthComponent.h"
+#include "EchoPlayerCombatComponent.h"
+#include "EchoSwordWhipComponent.h"
+#include "TimerManager.h"
 #include "EchoGameMode.h"
 #include "EchoGameUserSettings.h"
 #include "EchoHUD.h"
@@ -241,6 +247,157 @@ void AOurLastEchoPlayerController::EchoShowBothEras()
 	if (AEchoEraDirector* Director = AEchoEraDirector::Get(this))
 	{
 		Director->SetShowBothEras(!Director->IsShowingBothEras());
+	}
+}
+
+void AOurLastEchoPlayerController::EchoGod()
+{
+	ServerCombatDebug(TEXT("God"), FString());
+}
+
+void AOurLastEchoPlayerController::EchoSpawnEnemy(const FString& Type)
+{
+	ServerCombatDebug(TEXT("Spawn"), Type);
+}
+
+void AOurLastEchoPlayerController::EchoShowAllEnemies()
+{
+	ServerCombatDebug(TEXT("ShowAll"), FString());
+}
+
+void AOurLastEchoPlayerController::EchoSkipToWave(int32 Wave)
+{
+	ServerCombatDebug(TEXT("Wave"), FString::FromInt(Wave));
+}
+
+void AOurLastEchoPlayerController::EchoRestartArena()
+{
+	ServerCombatDebug(TEXT("Restart"), FString());
+}
+
+void AOurLastEchoPlayerController::EchoHurt(float Amount)
+{
+	ServerCombatDebug(TEXT("Hurt"), FString::SanitizeFloat(Amount));
+}
+
+void AOurLastEchoPlayerController::EchoGoTo(const FString& Where)
+{
+	ServerCombatDebug(TEXT("GoTo"), Where);
+}
+
+void AOurLastEchoPlayerController::EchoShoot(const FString& Kind)
+{
+	AOurLastEchoCharacter* PlayerCharacter = Cast<AOurLastEchoCharacter>(GetPawn());
+	UEchoSpiritBowComponent* Bow = PlayerCharacter ? PlayerCharacter->GetSpiritBow() : nullptr;
+	if (!Bow)
+	{
+		return;
+	}
+	if (Kind.Equals(TEXT("quick"), ESearchCase::IgnoreCase))
+	{
+		Bow->SetAiming(false);
+		Bow->QuickShot();
+		return;
+	}
+	Bow->SetAiming(true);
+	Bow->BeginCharge();
+	if (Kind.Equals(TEXT("charged"), ESearchCase::IgnoreCase))
+	{
+		// Let go once fully drawn
+		TWeakObjectPtr<UEchoSpiritBowComponent> WeakBow(Bow);
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([WeakBow]()
+		{
+			if (WeakBow.IsValid())
+			{
+				WeakBow->ReleaseCharge();
+			}
+		}), Bow->ChargeTime + 0.1f, false);
+	}
+	else
+	{
+		Bow->ReleaseCharge();
+	}
+}
+
+void AOurLastEchoPlayerController::EchoLash(const FString& Kind)
+{
+	AOurLastEchoCharacter* PlayerCharacter = Cast<AOurLastEchoCharacter>(GetPawn());
+	UEchoSwordWhipComponent* Whip = PlayerCharacter ? PlayerCharacter->GetSwordWhip() : nullptr;
+	if (!Whip)
+	{
+		return;
+	}
+	if (Kind.Equals(TEXT("charged"), ESearchCase::IgnoreCase))
+	{
+		FVector Location;
+		FRotator Rotation;
+		GetPlayerViewPoint(Location, Rotation);
+		Whip->LashOfKind(Rotation.Vector(), EEchoAttackKind::WhipCharged, 1.0f);
+	}
+	else
+	{
+		Whip->ComboLash();
+	}
+}
+
+void AOurLastEchoPlayerController::EchoDodge()
+{
+	if (AOurLastEchoCharacter* PlayerCharacter = Cast<AOurLastEchoCharacter>(GetPawn()))
+	{
+		PlayerCharacter->GetPlayerCombat()->RequestDodge();
+	}
+}
+
+void AOurLastEchoPlayerController::ServerCombatDebug_Implementation(const FString& Command, const FString& Argument)
+{
+	AOurLastEchoCharacter* PlayerCharacter = Cast<AOurLastEchoCharacter>(GetPawn());
+	AEchoGameState* GameState = GetWorld()->GetGameState<AEchoGameState>();
+	AEchoArenaManager* Arena = AEchoArenaManager::Get(GetWorld());
+	UE_LOG(LogOurLastEcho, Log, TEXT("Combat debug from %s: %s %s"), *GetName(), *Command, *Argument);
+
+	if (Command == TEXT("God") && PlayerCharacter)
+	{
+		UEchoHealthComponent* Health = PlayerCharacter->GetHealth();
+		Health->SetGodMode(!Health->IsGodMode());
+		ClientMessage(Health->IsGodMode() ? TEXT("God mode on") : TEXT("God mode off"));
+	}
+	else if (Command == TEXT("Spawn") && PlayerCharacter)
+	{
+		const FString Name = Argument.ToLower();
+		const EEchoEnemyType Type = Name.StartsWith(TEXT("sh")) ? EEchoEnemyType::Shade : Name.StartsWith(TEXT("g")) || Name.StartsWith(TEXT("st")) ? EEchoEnemyType::StoneGuardian
+			: Name.StartsWith(TEXT("t")) || Name.StartsWith(TEXT("sk")) ? EEchoEnemyType::SkyTalon : EEchoEnemyType::DustWraith;
+		const FVector Ahead = PlayerCharacter->GetActorLocation() + PlayerCharacter->GetActorForwardVector() * 500.0f
+			+ FVector(0.0f, 0.0f, Type == EEchoEnemyType::SkyTalon ? 500.0f : 50.0f);
+		AEchoArenaManager::SpawnEnemyAnywhere(GetWorld(), Type, Ahead);
+	}
+	else if (Command == TEXT("ShowAll") && GameState)
+	{
+		GameState->SetDebugShowAllEnemies(!GameState->IsDebugShowAllEnemies());
+	}
+	else if (Command == TEXT("Wave") && Arena)
+	{
+		Arena->SkipToWave(FCString::Atoi(*Argument));
+	}
+	else if (Command == TEXT("Restart") && Arena)
+	{
+		Arena->RestartArena();
+	}
+	else if (Command == TEXT("Hurt") && PlayerCharacter)
+	{
+		FEchoDamageInfo Info;
+		Info.Amount = FCString::Atof(*Argument);
+		Info.Kind = EEchoAttackKind::Debug;
+		Info.HitLocation = PlayerCharacter->GetActorLocation();
+		PlayerCharacter->GetHealth()->ApplyDamage(Info);
+	}
+	else if (Command == TEXT("GoTo"))
+	{
+		if (AEchoGameMode* GameMode = GetWorld()->GetAuthGameMode<AEchoGameMode>())
+		{
+			const bool bBack = Argument.Equals(TEXT("back"), ESearchCase::IgnoreCase);
+			GameMode->TravelBothTo(bBack ? TEXT("/Game/Echo/Maps/Lvl_SpiritPath") : TEXT("/Game/Echo/Maps/CombatTest"), bBack ? FName(TEXT("CombatDoor")) : FName(TEXT("ArenaEntrance")));
+		}
 	}
 }
 

@@ -41,5 +41,6 @@ void AEchoGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 	DOREPLIFETIME(AEchoGameState, bMilestoneComplete);
 	DOREPLIFETIME(AEchoGameState, bDebugShowAllPlatforms);
+	DOREPLIFETIME(AEchoGameState, bDebugShowAllEnemies);
 	DOREPLIFETIME(AEchoGameState, PlayersInPauseMenu);
 }
