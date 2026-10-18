@@ -164,6 +164,8 @@ def scenario():
     check(a_s is not None and a_s.get_state() == unreal.EchoArenaState.IDLE, "the arena waits for a player to walk in")
     a_s.set_editor_property("intermission_seconds", 0.6)
     a_s.set_editor_property("restart_delay", 0.6)
+    # Players get moved around (and roll) inside the arena during the checks: only the wave checks start it
+    a_s.get_editor_property("start_zone").set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
     yield 1.5
 
     # ---- health and the debug commands
@@ -234,6 +236,8 @@ def scenario():
     check(ok, f"... it falls to the ground stunned, seen on both machines (z {z_air:.0f} -> {t.get_actor_location().z:.0f})")
     check(damage(t, 12, K.WHIP_LIGHT, saraa_s) == R.APPLIED and t.get_health().get_health() < hp, "... now Saraa's whip hurts it")
     check(damage(t, 20, K.AIMED_SHOT, bat_s) == R.BLOCKED, "... and Bat's arrows do nothing while it's down")
+    # Frozen as a dummy so far; let it fly again (it climbs back to its hover height after the stun)
+    t.get_editor_property("character_movement").set_editor_property("max_fly_speed", 650.0)
     z_down = t.get_actor_location().z
     ok = yield from wait_for(lambda: not t.is_stunned() and t.get_actor_location().z > z_down + 150, 5.0)
     check(ok, f"... after the stun it flies back up (z {z_down:.0f} -> {t.get_actor_location().z:.0f})")
@@ -260,6 +264,10 @@ def bow_checks(server, bat_pc, bat_s, a_s):
     freeze(target)
     target.get_health().set_editor_property("max_health", 500.0)
     target.get_health().revive()
+    # Saraa stands in the line of fire: the aim and the arrows go through players
+    saraa = character(server, SPIRIT)
+    saraa_home = saraa.get_actor_location()
+    saraa.set_actor_location(bat_s.get_actor_location() + bat_s.get_actor_forward_vector() * 250, False, True)
     yield 1.5
     bow = bat_s.get_spirit_bow()
     for kind, cmd, amount, wait in ((K.QUICK_SHOT, "quick", 10, 1.0), (K.AIMED_SHOT, "aimed", 20, 1.5), (K.CHARGED_SHOT, "charged", 45, 2.5)):
@@ -268,10 +276,11 @@ def bow_checks(server, bat_pc, bat_s, a_s):
         console(bat_pc, f"EchoShoot {cmd}")
         ok = yield from wait_for(lambda: bow.get_shot_count(kind) > before_shots and target.get_health().get_health() < before_hp - 0.5, wait + 1.0)
         check(ok and abs((before_hp - target.get_health().get_health()) - amount) < 0.5,
-              f"Bat's {cmd} shot fires and hits for {amount} (dealt {before_hp - target.get_health().get_health():.0f})")
+              f"Bat's {cmd} shot fires through Saraa and hits for {amount} (dealt {before_hp - target.get_health().get_health():.0f})")
         yield 0.8
     check(target.get_health().get_last_hit_cue().heavy, "... the charged shot lands as a heavy hit (hit-stop)")
     bow.set_aiming(False)
+    saraa.set_actor_location(saraa_home, False, True)
     target.remove_quietly()
     yield 0.5
 
@@ -362,6 +371,8 @@ def downed_checks(server, client, host_pc, guest_pc, host_s, guest_s, a_s):
     dist = (guest_s.get_actor_location() - host_s.get_actor_location()).length()
     check(ok and dist < 450 and abs(guest_s.get_health().get_health() - 100) < 0.1, f"... and is back after {delay:.0f} s beside the other player ({dist:.0f} cm), at full health")
 
+    # A revived player is invulnerable for a moment
+    yield 2.0
     restarts = a_s.get_restart_count()
     console(host_pc, "EchoHurt 500")
     console(guest_pc, "EchoHurt 500")

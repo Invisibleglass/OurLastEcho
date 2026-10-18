@@ -17,10 +17,10 @@
 
 namespace
 {
-	const TCHAR* const Sphere = TEXT("/Engine/BasicShapes/Sphere.Sphere");
-	const TCHAR* const Cube = TEXT("/Engine/BasicShapes/Cube.Cube");
-	const TCHAR* const Cone = TEXT("/Engine/BasicShapes/Cone.Cone");
-	const TCHAR* const Cylinder = TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
+	const TCHAR* const EnemySphereMesh = TEXT("/Engine/BasicShapes/Sphere.Sphere");
+	const TCHAR* const EnemyCubeMesh = TEXT("/Engine/BasicShapes/Cube.Cube");
+	const TCHAR* const EnemyConeMesh = TEXT("/Engine/BasicShapes/Cone.Cone");
+	const TCHAR* const EnemyCylinderMesh = TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
 
 	/** A second flat-colour material for glowing details (eyes, cores) */
 	UMaterialInstanceDynamic* MakeGlowMaterial(AActor* Owner, UMaterialInterface* Base, const FLinearColor& Color, float GlowAmount)
@@ -66,16 +66,16 @@ AEchoDustWraith::AEchoDustWraith(const FObjectInitializer& ObjectInitializer)
 void AEchoDustWraith::BuildBody()
 {
 	// A dust devil: an upturned swirl of cones, a hunched body and two claws
-	AddPart(Cone, FVector(0.0f, 0.0f, -45.0f), FVector(0.9f, 0.9f, 0.9f), FRotator(180.0f, 0.0f, 0.0f));
-	AddPart(Cone, FVector(0.0f, 0.0f, -10.0f), FVector(0.7f, 0.7f, 0.7f), FRotator(180.0f, 40.0f, 0.0f));
-	AddPart(Sphere, FVector(0.0f, 0.0f, 40.0f), FVector(0.75f, 0.75f, 0.85f));
-	AddPart(Sphere, FVector(18.0f, 0.0f, 85.0f), FVector(0.45f));
-	AddPart(Cone, FVector(35.0f, 38.0f, 35.0f), FVector(0.18f, 0.18f, 0.55f), FRotator(-70.0f, 20.0f, 0.0f));
-	AddPart(Cone, FVector(35.0f, -38.0f, 35.0f), FVector(0.18f, 0.18f, 0.55f), FRotator(-70.0f, -20.0f, 0.0f));
+	AddPart(EnemyConeMesh, FVector(0.0f, 0.0f, -45.0f), FVector(0.9f, 0.9f, 0.9f), FRotator(180.0f, 0.0f, 0.0f));
+	AddPart(EnemyConeMesh, FVector(0.0f, 0.0f, -10.0f), FVector(0.7f, 0.7f, 0.7f), FRotator(180.0f, 40.0f, 0.0f));
+	AddPart(EnemySphereMesh, FVector(0.0f, 0.0f, 40.0f), FVector(0.75f, 0.75f, 0.85f));
+	AddPart(EnemySphereMesh, FVector(18.0f, 0.0f, 85.0f), FVector(0.45f));
+	AddPart(EnemyConeMesh, FVector(35.0f, 38.0f, 35.0f), FVector(0.18f, 0.18f, 0.55f), FRotator(-70.0f, 20.0f, 0.0f));
+	AddPart(EnemyConeMesh, FVector(35.0f, -38.0f, 35.0f), FVector(0.18f, 0.18f, 0.55f), FRotator(-70.0f, -20.0f, 0.0f));
 	if (UMaterialInstanceDynamic* Eyes = MakeGlowMaterial(this, BodyMaterial.LoadSynchronous(), FLinearColor(1.0f, 0.7f, 0.2f), 0.5f))
 	{
-		AddPart(Sphere, FVector(40.0f, 10.0f, 92.0f), FVector(0.07f), FRotator::ZeroRotator, false)->SetMaterial(0, Eyes);
-		AddPart(Sphere, FVector(40.0f, -10.0f, 92.0f), FVector(0.07f), FRotator::ZeroRotator, false)->SetMaterial(0, Eyes);
+		AddPart(EnemySphereMesh, FVector(40.0f, 10.0f, 92.0f), FVector(0.07f), FRotator::ZeroRotator, false)->SetMaterial(0, Eyes);
+		AddPart(EnemySphereMesh, FVector(40.0f, -10.0f, 92.0f), FVector(0.07f), FRotator::ZeroRotator, false)->SetMaterial(0, Eyes);
 	}
 }
 
@@ -113,15 +113,15 @@ AEchoShade::AEchoShade(const FObjectInitializer& ObjectInitializer)
 void AEchoShade::BuildBody()
 {
 	// A tall hooded shape: a long robe, a hood, pale eyes, and reaching arms
-	AddPart(Cone, FVector(0.0f, 0.0f, -20.0f), FVector(0.85f, 0.85f, 1.5f));
-	AddPart(Sphere, FVector(5.0f, 0.0f, 70.0f), FVector(0.5f, 0.5f, 0.6f));
-	AddPart(Cone, FVector(0.0f, 0.0f, 95.0f), FVector(0.45f, 0.45f, 0.35f));
-	AddPart(Cylinder, FVector(30.0f, 35.0f, 30.0f), FVector(0.12f, 0.12f, 0.7f), FRotator(-65.0f, 15.0f, 0.0f));
-	AddPart(Cylinder, FVector(30.0f, -35.0f, 30.0f), FVector(0.12f, 0.12f, 0.7f), FRotator(-65.0f, -15.0f, 0.0f));
+	AddPart(EnemyConeMesh, FVector(0.0f, 0.0f, -20.0f), FVector(0.85f, 0.85f, 1.5f));
+	AddPart(EnemySphereMesh, FVector(5.0f, 0.0f, 70.0f), FVector(0.5f, 0.5f, 0.6f));
+	AddPart(EnemyConeMesh, FVector(0.0f, 0.0f, 95.0f), FVector(0.45f, 0.45f, 0.35f));
+	AddPart(EnemyCylinderMesh, FVector(30.0f, 35.0f, 30.0f), FVector(0.12f, 0.12f, 0.7f), FRotator(-65.0f, 15.0f, 0.0f));
+	AddPart(EnemyCylinderMesh, FVector(30.0f, -35.0f, 30.0f), FVector(0.12f, 0.12f, 0.7f), FRotator(-65.0f, -15.0f, 0.0f));
 	if (UMaterialInstanceDynamic* Eyes = MakeGlowMaterial(this, BodyMaterial.LoadSynchronous(), FLinearColor(0.75f, 0.9f, 1.0f), 0.6f))
 	{
-		AddPart(Sphere, FVector(26.0f, 9.0f, 74.0f), FVector(0.07f), FRotator::ZeroRotator, false)->SetMaterial(0, Eyes);
-		AddPart(Sphere, FVector(26.0f, -9.0f, 74.0f), FVector(0.07f), FRotator::ZeroRotator, false)->SetMaterial(0, Eyes);
+		AddPart(EnemySphereMesh, FVector(26.0f, 9.0f, 74.0f), FVector(0.07f), FRotator::ZeroRotator, false)->SetMaterial(0, Eyes);
+		AddPart(EnemySphereMesh, FVector(26.0f, -9.0f, 74.0f), FVector(0.07f), FRotator::ZeroRotator, false)->SetMaterial(0, Eyes);
 	}
 }
 
@@ -168,7 +168,7 @@ bool AEchoStoneGuardian::IsOpen() const
 
 float AEchoStoneGuardian::GetOpenFraction() const
 {
-	return IsOpen() ? FMath::Clamp((OpenUntil - ServerNow()) / OpenDuration, 0.0f, 1.0f) : 0.0f;
+	return IsOpen() ? FMath::Clamp((OpenUntil - ServerNow()) / FMath::Max(OpenUntil - OpenedAt, 0.1f), 0.0f, 1.0f) : 0.0f;
 }
 
 EEchoDamageResult AEchoStoneGuardian::FilterIncomingDamage(FEchoDamageInfo& Info)
@@ -182,7 +182,8 @@ EEchoDamageResult AEchoStoneGuardian::FilterIncomingDamage(FEchoDamageInfo& Info
 	{
 		// Saraa cracks the shell open (her whip never hurts it); another lash keeps it open
 		const bool bWasClosed = !IsOpen();
-		OpenUntil = ServerNow() + OpenDuration;
+		OpenedAt = ServerNow();
+		OpenUntil = OpenedAt + OpenDuration;
 		ForceNetUpdate();
 		if (bWasClosed)
 		{
@@ -227,7 +228,7 @@ void AEchoStoneGuardian::BuildBody()
 {
 	// A glowing core inside a shell of stone slabs, with a blocky head and fists
 	CoreMID = MakeGlowMaterial(this, BodyMaterial.LoadSynchronous(), FLinearColor(1.0f, 0.55f, 0.1f), 0.05f);
-	Core = AddPart(Sphere, FVector(0.0f, 0.0f, 10.0f), FVector(1.05f), FRotator::ZeroRotator, false);
+	Core = AddPart(EnemySphereMesh, FVector(0.0f, 0.0f, 10.0f), FVector(1.05f), FRotator::ZeroRotator, false);
 	if (CoreMID)
 	{
 		Core->SetMaterial(0, CoreMID);
@@ -244,10 +245,10 @@ void AEchoStoneGuardian::BuildBody()
 	};
 	for (const FSlab& Slab : Slabs)
 	{
-		ShellParts.Add(AddPart(Cube, Slab.Location, Slab.Scale));
+		ShellParts.Add(AddPart(EnemyCubeMesh, Slab.Location, Slab.Scale));
 	}
-	AddPart(Cube, FVector(40.0f, 85.0f, -40.0f), FVector(0.5f, 0.45f, 0.6f));
-	AddPart(Cube, FVector(40.0f, -85.0f, -40.0f), FVector(0.5f, 0.45f, 0.6f));
+	AddPart(EnemyCubeMesh, FVector(40.0f, 85.0f, -40.0f), FVector(0.5f, 0.45f, 0.6f));
+	AddPart(EnemyCubeMesh, FVector(40.0f, -85.0f, -40.0f), FVector(0.5f, 0.45f, 0.6f));
 }
 
 void AEchoStoneGuardian::UpdateLook(float DeltaSeconds)
@@ -279,6 +280,7 @@ void AEchoStoneGuardian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AEchoStoneGuardian, OpenUntil);
+	DOREPLIFETIME(AEchoStoneGuardian, OpenedAt);
 }
 
 // ------------------------------------------------------------------ Sky Talon (Bat first)
@@ -328,7 +330,7 @@ bool AEchoSkyTalon::IsStunned() const
 
 float AEchoSkyTalon::GetOpenFraction() const
 {
-	return IsStunned() ? FMath::Clamp((StunnedUntil - ServerNow()) / StunDuration, 0.0f, 1.0f) : 0.0f;
+	return IsStunned() ? FMath::Clamp((StunnedUntil - ServerNow()) / FMath::Max(StunnedUntil - StunnedAt, 0.1f), 0.0f, 1.0f) : 0.0f;
 }
 
 void AEchoSkyTalon::RefreshGround()
@@ -485,7 +487,8 @@ EEchoDamageResult AEchoSkyTalon::FilterIncomingDamage(FEchoDamageInfo& Info)
 		}
 		// Knocked out of the sky: it falls and lies stunned
 		CancelAttack();
-		StunnedUntil = ServerNow() + StunDuration;
+		StunnedAt = ServerNow();
+		StunnedUntil = StunnedAt + StunDuration;
 		bWasStunned = false;
 		OnRep_StunnedUntil();
 		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
@@ -561,15 +564,15 @@ float AEchoSkyTalon::GetGlowAmount() const
 void AEchoSkyTalon::BuildBody()
 {
 	// A sleek diving bird: a stretched body, a beak, two broad wings and a tail
-	AddPart(Sphere, FVector::ZeroVector, FVector(0.9f, 0.5f, 0.45f));
-	AddPart(Cone, FVector(55.0f, 0.0f, 0.0f), FVector(0.2f, 0.2f, 0.4f), FRotator(-90.0f, 0.0f, 0.0f));
-	Wings.Add(AddPart(Cube, FVector(-5.0f, 70.0f, 5.0f), FVector(0.55f, 1.1f, 0.05f)));
-	Wings.Add(AddPart(Cube, FVector(-5.0f, -70.0f, 5.0f), FVector(0.55f, 1.1f, 0.05f)));
-	AddPart(Cube, FVector(-60.0f, 0.0f, 5.0f), FVector(0.4f, 0.35f, 0.04f), FRotator(0.0f, 0.0f, 0.0f));
+	AddPart(EnemySphereMesh, FVector::ZeroVector, FVector(0.9f, 0.5f, 0.45f));
+	AddPart(EnemyConeMesh, FVector(55.0f, 0.0f, 0.0f), FVector(0.2f, 0.2f, 0.4f), FRotator(-90.0f, 0.0f, 0.0f));
+	Wings.Add(AddPart(EnemyCubeMesh, FVector(-5.0f, 70.0f, 5.0f), FVector(0.55f, 1.1f, 0.05f)));
+	Wings.Add(AddPart(EnemyCubeMesh, FVector(-5.0f, -70.0f, 5.0f), FVector(0.55f, 1.1f, 0.05f)));
+	AddPart(EnemyCubeMesh, FVector(-60.0f, 0.0f, 5.0f), FVector(0.4f, 0.35f, 0.04f), FRotator(0.0f, 0.0f, 0.0f));
 	if (UMaterialInstanceDynamic* RingMID = MakeGlowMaterial(this, BodyMaterial.LoadSynchronous(), FLinearColor(1.0f, 0.95f, 0.5f), 0.5f))
 	{
 		// The stun ring: spins over its head while it's down
-		StunRing = AddPart(Cylinder, FVector(0.0f, 0.0f, 70.0f), FVector(0.9f, 0.9f, 0.03f), FRotator::ZeroRotator, false);
+		StunRing = AddPart(EnemyCylinderMesh, FVector(0.0f, 0.0f, 70.0f), FVector(0.9f, 0.9f, 0.03f), FRotator::ZeroRotator, false);
 		StunRing->SetMaterial(0, RingMID);
 		StunRing->SetVisibility(false);
 	}
@@ -601,4 +604,5 @@ void AEchoSkyTalon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AEchoSkyTalon, StunnedUntil);
+	DOREPLIFETIME(AEchoSkyTalon, StunnedAt);
 }

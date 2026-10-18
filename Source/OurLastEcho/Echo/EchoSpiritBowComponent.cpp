@@ -433,13 +433,22 @@ FVector UEchoSpiritBowComponent::GetAimTarget() const
 	}
 
 	const FVector Direction = ViewRotation.Vector();
-	// Start level with the character, so nothing between the camera and Bat can catch the trace
-	const FVector TraceStart = ViewLocation + Direction * FMath::Max(0.0f, FVector::DotProduct(Character->GetActorLocation() - ViewLocation, Direction));
+	// Start past the bow's muzzle, so nothing between the camera and Bat (or at his shoulder) can catch the trace
+	const float MuzzleDistance = FMath::Max(0.0f, FVector::DotProduct(Character->GetActorLocation() - ViewLocation, Direction)) + MuzzleOffset.X;
+	const FVector TraceStart = ViewLocation + Direction * MuzzleDistance;
 	const FVector TraceEnd = TraceStart + Direction * Range;
 
+	// The trace stops on what the arrow itself stops on: an arrow flies through players (Saraa beside Bat caught the
+	// trace and the shot went backwards) and other arrows
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SpiritBowAim), false, Character);
+	FCollisionResponseParams Responses;
+	Responses.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+	Responses.CollisionResponse.SetResponse(ECC_SpiritPawn, ECR_Ignore);
+	Responses.CollisionResponse.SetResponse(ECC_EchoArrow, ECR_Ignore);
 	FHitResult Hit;
-	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_EchoArrow, Params);
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_EchoArrow, Params, Responses);
+	UE_LOG(LogOurLastEcho, Verbose, TEXT("Bow aim: from %s -> %s (%s)"), *TraceStart.ToCompactString(),
+		*(bHit ? Hit.ImpactPoint : TraceEnd).ToCompactString(), bHit ? *GetNameSafe(Hit.GetActor()) : TEXT("no hit"));
 	return bHit ? Hit.ImpactPoint : TraceEnd;
 }
 
@@ -501,6 +510,7 @@ AEchoArrow* UEchoSpiritBowComponent::FireShotAt(FVector TargetPoint, EEchoAttack
 		Arrow->Launch(Velocity, ArrowGravityScale);
 	}
 
+	UE_LOG(LogOurLastEcho, Verbose, TEXT("Bow shot %s from %s at %s, velocity %s"), *UEnum::GetValueAsString(Kind), *Start.ToCompactString(), *TargetPoint.ToCompactString(), *Velocity.ToCompactString());
 	ShotCounts.FindOrAdd(Kind)++;
 	LastFireTime = GetWorld()->GetTimeSeconds();
 	return Arrow;

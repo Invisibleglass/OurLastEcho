@@ -102,6 +102,10 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_OpenUntil)
 	float OpenUntil = 0.0f;
 
+	/** Server time it opened (so every machine shows the timer for the server's own open time) */
+	UPROPERTY(Replicated)
+	float OpenedAt = 0.0f;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> ShellParts;
 
@@ -180,6 +184,10 @@ protected:
 	/** Server time until which it's on the ground stunned (0 = flying) */
 	UPROPERTY(ReplicatedUsing = OnRep_StunnedUntil)
 	float StunnedUntil = 0.0f;
+
+	/** Server time it was knocked down */
+	UPROPERTY(Replicated)
+	float StunnedAt = 0.0f;
 
 	FVector DiveTarget = FVector::ZeroVector;
 	bool bStruckThisDive = false;

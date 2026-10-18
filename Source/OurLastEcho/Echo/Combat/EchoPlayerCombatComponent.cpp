@@ -89,7 +89,7 @@ bool UEchoPlayerCombatComponent::RequestDodge()
 	AOurLastEchoCharacter* Character = GetCharacter();
 	UEchoCharacterMovementComponent* Movement = Character ? Character->GetEchoMovement() : nullptr;
 	if (!Movement || bDowned || Movement->IsSwinging() || !Movement->IsMovingOnGround()
-		|| GetWorld()->GetTimeSeconds() - LastDodgeTime < DodgeCooldown)
+		|| IsDodgeCoolingDown())
 	{
 		return false;
 	}
@@ -99,15 +99,20 @@ bool UEchoPlayerCombatComponent::RequestDodge()
 	return true;
 }
 
+bool UEchoPlayerCombatComponent::IsDodgeCoolingDown() const
+{
+	return GetWorld()->GetTimeSeconds() - LastDodgeTime < DodgeCooldown;
+}
+
 bool UEchoPlayerCombatComponent::CanServerDodge() const
 {
 	// The server's own cooldown, with slack for network timing (a refused roll gets corrected)
-	return !bDowned && GetWorld()->GetTimeSeconds() - LastDodgeTime >= DodgeCooldown * 0.6f;
+	return !bDowned && GetWorld()->GetTimeSeconds() - LastGrantedDodgeTime >= DodgeCooldown * 0.6f;
 }
 
 void UEchoPlayerCombatComponent::NotifyDodged()
 {
-	LastDodgeTime = GetWorld()->GetTimeSeconds();
+	LastGrantedDodgeTime = GetWorld()->GetTimeSeconds();
 	DodgeLookRemaining = DodgeLookDuration;
 	if (GetOwner()->HasAuthority())
 	{

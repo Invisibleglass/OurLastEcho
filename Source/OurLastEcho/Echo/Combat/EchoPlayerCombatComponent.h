@@ -108,6 +108,8 @@ public:
 	/** Called by the movement component when a roll really starts (never for replayed moves) */
 	void NotifyDodged();
 
+	bool IsDodgeCoolingDown() const;
+
 	/** May the movement component start a roll now (server's own cooldown check)? */
 	bool CanServerDodge() const;
 
@@ -153,8 +155,11 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_DodgeCount)
 	int32 DodgeCount = 0;
 
-	/** Owner/server: world time of the last roll */
+	/** Owner: world time of the last roll asked for */
 	float LastDodgeTime = -1000.0f;
+
+	/** World time of the last roll really started (the server's cooldown; on the host the same machine asks and grants) */
+	float LastGrantedDodgeTime = -1000.0f;
 
 	FTimerHandle RespawnTimer;
 
