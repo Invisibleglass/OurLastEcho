@@ -84,6 +84,28 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 - **Tests:** `Scripts/run_eos_test.ps1` (editor closed; Dev Auth Tool running on port 6300 with two credentials, by default `Default`/`Default2`; options `-NetEmu average|bad`, `-SoakMinutes N`). `Scripts/run_lan_test.ps1` forces Null. `Scripts/package_game.ps1` makes `Packaged/` (git-ignored) and its zip.
 - **Windows Smart App Control must be off.** It blocks freshly built unsigned DLLs ("Bad Image" 0xc0e90002; Code Integrity event 3033).
 - **The editor window must not be minimized** for `ue_cmd.ps1` / `ue_py.ps1`: the Slate snapshot skips minimized windows, and the console box isn't found.
+## Combat, enemies, the CombatTest arena (Milestone 8)
+
+- **Health:** `UEchoHealthComponent` (`Echo/Combat/`) on players and enemies. Only the server applies damage: `ApplyDamage(FEchoDamageInfo)` checks the team, then the owner's `IEchoDamageFilter::FilterIncomingDamage` (shells, stuns, "not in my world"), then invulnerability/god mode. Results are `EEchoDamageResult`; every hit goes to all machines as the replicated `LastHitCue` (flash, sound, hit-stop). Clients only send attack RPCs (bow `ServerFireShot`, whip `ServerLash`).
+- **Dodge** is predicted movement like the swing: `bWantsToDodge` is a one-shot in the saved move (`FLAG_Custom_1`), consumed in `UpdateCharacterStateBeforeMovement` → `TryDodge`. The asked-for cooldown (`LastDodgeTime`) and the granted one (`LastGrantedDodgeTime`, `CanServerDodge`) are separate: on the host the same component does both.
+- **Enemies** (`AEchoEnemy` + `EchoEnemies.h`: Dust Wraith, Shade, Stone Guardian, Sky Talon) are shared-layer actors. `Presence` sets collision in `PostInitializeComponents`:
+  - LivingOnly → object type Pawn, ignores SpiritPawn.
+  - SpiritOnly → SpiritPawn, ignores Pawn.
+  - Both → WorldDynamic.
+
+  The capsule ignores EchoArrow. Arrows hit an `ArrowHitBox` (blocks only EchoArrow), enabled only if Bat can affect the enemy. Visibility is local (`UpdatePresence`, plus `AEchoGameState::bDebugShowAllEnemies`).
+- **Open timers** replicate both their start and end (`OpenedAt`/`OpenUntil`, `StunnedAt`/`StunnedUntil`), so every machine draws the server's timer.
+- **The brain:** `AEchoEnemyController` (AI Perception sight, target choice every 0.25 s, only players in the enemy's world) runs the StateTree `/Game/Echo/Combat/ST_EchoEnemy`. It's built from C++ by `UEchoEditorLibrary::BuildEnemyStateTree`, with states Stunned / Attack / Chase / Idle from `FEchoEnemyCondition` / `FEchoEnemyTask` calling the enemy's virtual hooks. Attack phases (WindUp / Strike / Recover) replicate with a server start time.
+- **The bow's aim trace** ignores Pawn, SpiritPawn and EchoArrow objects (what the arrow ignores) and starts past the muzzle; otherwise Saraa beside Bat catches it.
+- **Arena:** `AEchoArenaManager` (waves, spawn points, StartZone, `RestartArena`, `SkipToWave`), `AEchoArenaRestartPad`, `AEchoCheckpoint` at the entrance.
+- **Downed players:** `AEchoGameMode::HandlePlayerDowned` / `RespawnDownedPlayer` respawns them beside the partner; when both are down, `RestartAfterAllDown` restarts the arena.
+- **Doors:** `AEchoTravelDoor` → `AEchoGameMode::TravelBothTo(Map, ArrivalTag)`. Seamless on EOS (not PIE); otherwise a **relative** hard travel: absolute resets the listen port to 7777, and PIE's guest reconnects to 17777. `?EchoArrive=<Tag>` picks the PlayerStarts tagged `<Tag>_Bat` / `<Tag>_Saraa`. `Logout` ignores a guest who disconnects during a travel (otherwise "Saraa left" sends the host to the lobby).
+- **Level:** `Scripts/build_combat.py` (open editor; tag `CombatBuilder`; it reuses build_eras.py's helpers) builds `CombatTest` + `CombatTest_Present`/`_Past`, the enemy BPs, the StateTree, `IA_Dodge`/`IMC_Combat`, and in Lvl_SpiritPath only the `CombatTestDoor` and the `CombatDoor_*` PlayerStarts.
+- **Debug commands** (`AOurLastEchoPlayerController`, guests go through `ServerCombatDebug`): `EchoGod`, `EchoSpawnEnemy`, `EchoShowAllEnemies`, `EchoSkipToWave`, `EchoRestartArena`, `EchoHurt`, `EchoGoTo combat|back`, `EchoShoot`, `EchoLash`, `EchoDodge`.
+- **Tests:** `Scripts/tools/run_combat_test.ps1 -Mode normal|host_saraa|travel [-NetEmu average|bad]` (56 / 56 / 10 checks); the LAN test also travels to CombatTest and back.
+  - **Never open a door from inside Python** (a teleport into its trigger): the guest's ClientTravel RPC then runs on the host. Walk in with movement input, or queue `EchoGoTo` with `EchoUITestLibrary.queue_console_command`.
+  - Aim bow tests from the camera (`player_camera_manager.get_camera_location()`), not from the character's centre.
+
 ## Engine & toolchain
 
 - **Unreal Engine 5.8.3**, installed at `D:\UE_5.8`. It's a registered (non-launcher) build: the `.uproject`'s `EngineAssociation` is a GUID that maps to that path via `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`.

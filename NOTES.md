@@ -1,3 +1,113 @@
+# Milestone 8 – First combat (a separate test level)
+
+Branch: `milestone-8-combat`, branched from `milestone-7-online` (Milestone 7 isn't merged yet: the friend test is still to do). Nothing was pushed.
+
+**In short:** both players can now fight. There's a reusable health and damage system, Saraa's whip combo and charged lash, Bat's quick, aimed and charged shots, a dodge roll for both, and four enemy types that only work as a team. They're in a new **CombatTest** arena with four waves, reached through a door near the start of the first level.
+
+**Status (2026-10-18):** everything in the brief is built, tested and committed. The combat test passes 56/56 in both roles, with and without network emulation; the doors work both ways in Play-In-Editor and between two real LAN game processes; and every earlier test still passes (see TEST_REPORT.md). **Not yet run:** the doors over real EOS (it needs the Dev Auth Tool running with both accounts signed in).
+
+## How to try it
+
+1. Play the first level as usual (PIE, or host and join from the title screen).
+2. Near the start, a glowing **"Combat Test"** door stands just behind the starting point. Either player walks into it and **both** go to the arena (the door arms 2 s after the level starts, so nobody goes through by accident).
+3. In the arena, walk forward out of the entrance to start wave 1. A banner at the top says the wave, how many enemies are left, and a hint.
+4. Behind the start: the **return door** (back to the first level, beside the Combat Test door) and a **Restart arena** button on a plinth (step on it).
+5. Or open `/Game/Echo/Maps/CombatTest` in the editor and press Play.
+
+## Controls
+
+| | Keyboard and mouse | Gamepad |
+|---|---|---|
+| **Saraa: light combo** | tap LMB (or E): lash, lash, wide finisher | right trigger |
+| **Saraa: charged lash** | hold LMB, release (a long heavy lash) | hold right trigger |
+| **Bat: quick shot** | LMB without aiming (fast, weak, no reticle needed) | right trigger |
+| **Bat: aimed shot** | hold RMB to aim, tap LMB | left trigger + right trigger |
+| **Bat: charged shot** | while aiming, hold LMB about 1 s (the reticle fills), release | hold right trigger while aiming |
+| **Dodge roll (both)** | Left Shift | B / Circle |
+
+Dodge is rebindable in Settings > Controls ("Dodge"). Saraa's whip still swings from anchors when one is in range: the lash only happens when there's no anchor to latch.
+
+## What was built
+
+All game logic is C++ in `Source/OurLastEcho/Echo/Combat/`. The Blueprints are thin tuning subclasses.
+
+- **Health and damage** (`UEchoHealthComponent`, on players and enemies; ready for bosses):
+  - **The server decides all damage.** Clients only ask to attack: Bat's shots and Saraa's lashes are server RPCs with cooldown and charge-time checks, and the server spawns the arrow or does the lash sweep.
+  - Teams (players / enemies) never hurt their own side. An owner can filter every hit (`IEchoDamageFilter`); that's how the shells, stuns and "not in my world" rules work. The results are Applied, Defeated, Blocked (a clink), Opened (cracked or knocked down), Immune and Ignored.
+  - Every hit is sent to every machine as a cue (`FEchoHitCue`): the hit flash, the sound, and the **hit-stop** on heavy hits (the enemy freezes for 0.07 s).
+- **Players** (`UEchoPlayerCombatComponent`):
+  - **Dodge roll** with **i-frames** (0.45 s), a 0.75 s cooldown, about 6.5 m. It's predicted movement like the whip swing: the roll is a flag in the saved move, so the server replays exactly the client's roll and nobody gets corrected.
+  - **Health bar** bottom-left for you and your partner, a red screen flash, a camera shake and a flinch when hurt.
+  - **Downed** at zero: the player lies down, can't move or attack, and a countdown shows. After 3 s they get back up **beside the partner** at full health with 1.5 s of safety. **Both down:** after 2.5 s the arena restarts from its entrance checkpoint (elsewhere: everyone goes back to their checkpoints).
+- **Saraa's whip** (`UEchoSwordWhipComponent`): light lash 12, light lash 12, then a finisher (20) that sweeps a wide arc. Hold for the charged lash (40, 7.8 m long, a coil shows while charging).
+- **Bat's bow** (`UEchoSpiritBowComponent`): quick shot 10, aimed shot 20, charged shot 45 (bigger, brighter, faster, heavy). The aim trace ignores players, so Saraa standing in front of Bat doesn't catch his shots.
+- **Enemies** (`AEchoEnemy` and the four types in `EchoEnemies.h`). They live in the shared layer, and each machine shows them to its own player only when they're in that player's world.
+  - **Dust Wraith** (present only): only Bat sees it, hits it, bumps into it, or is attacked by it. A swirling dust column that drifts in and claws.
+  - **Shade** (past only): the same for Saraa. A dark hooded shape with pale eyes.
+  - **Stone Guardian** (Saraa first): both see it. Arrows bounce off its shell with a clink. **Saraa's whip cracks the shell** (a crack sound, the shell slabs move apart, the core glows), and for **4 s** Bat's arrows hurt it while the glow fades; then the shell closes. Her whip never hurts it. Its attack is a slow, heavy slam.
+  - **Sky Talon** (Bat first): both see it. It circles at 6.5 m, out of the whip's reach (the whip clinks off it). **Bat's arrow knocks it down**: it falls, a stun ring spins over it, and for **4 s** Saraa's whip hurts it while Bat's arrows do nothing. Then it flies back up. Its attack is a screech while hovering, then a dive.
+  - **Cues for the open moments:** a sound, a glow and an **OPEN timer bar** under the enemy's health bar that runs down. A hit that does nothing gives a spark and a clink.
+  - **The brain is a StateTree** (`ST_EchoEnemy`, built from C++ by `UEchoEditorLibrary::BuildEnemyStateTree`): Stunned → Attack → Chase → Idle, with conditions and tasks that call into the enemy. Targets come from **AI Perception** (sight), with an awareness radius as a fallback, and an enemy only ever targets a player whose world it's in. Every attack is **telegraphed**: a wind-up (it swells and glows, with a warning sound), then the strike, then a recovery.
+  - **Health bars** float over enemies, only on the machines whose player can see them.
+  - **Defeat:** a pop and a fade, then it's removed.
+- **The arena** (`AEchoArenaManager`), with these waves:
+  1. 2 Dust Wraiths + 2 Shades
+  2. 2 Stone Guardians
+  3. 2 Sky Talons
+  4. one of each
+
+  It waits 4 s between waves and ends on "Arena cleared".
+  - The start zone begins it, the entrance checkpoint is where both restart, and the **Restart arena** pad (`AEchoArenaRestartPad`) starts over from wave 1.
+  - All of it is tunable on the placed actor: the waves, enemy classes, spawn points and delays.
+- **Doors** (`AEchoTravelDoor`): a frame with a glowing portal and a label. **Either player** walking in sends **both** to the other map. They arrive at the PlayerStarts tagged for the door (`CombatDoor_Bat`/`_Saraa` in the first level, `ArenaEntrance_Bat`/`_Saraa` in the arena).
+  - Online (EOS) the travel is **seamless**, so the session, the peer-to-peer connection and voice stay up. On LAN and in PIE it's a hard travel, and the guest reconnects.
+  - The eras load for each player after every trip.
+- **The level:**
+  - **`CombatTest`** is the shared layer: a greybox canyon arena, about 50 m across, with terraced walls, four pillars, rocks, and a raised ledge with a ramp for Bat. It also has the entrance, the return door, the restart pad and the spawn points.
+  - **`CombatTest_Present` / `CombatTest_Past`** are its era layers (the same pieces in each era's materials, lighting and ambience), loaded per player by its own `EraDirector`.
+  - **The first level only got the door** and its two arrival PlayerStarts.
+- **Tuning in Blueprint:** `BP_DustWraith`, `BP_Shade`, `BP_StoneGuardian`, `BP_SkyTalon` (health, speed, damage, wind-up times, open/stun times, colours, sounds). Player combat is tuned on the components in `BP_ThirdPersonCharacter` and `BP_Saraa`. Sounds are hooks, filled with engine placeholder sounds for now.
+
+## Debug console commands
+
+| Command | What it does |
+|---|---|
+| `EchoGod` | god mode for yourself (immune; "GOD MODE" on the HUD) |
+| `EchoSpawnEnemy wraith/shade/guardian/talon` | spawns one in front of you |
+| `EchoShowAllEnemies` | shows every enemy to both players (and their bars) |
+| `EchoSkipToWave N` | jumps to wave N (1–4) |
+| `EchoRestartArena` | restarts the arena |
+| `EchoHurt N` | hurts yourself by N |
+| `EchoGoTo combat` / `EchoGoTo back` | both players to the arena / back to the first level (the doors' own travel) |
+| `EchoShoot quick/aimed/charged`, `EchoLash combo/charged`, `EchoDodge` | attacks without input (used by the tests) |
+
+All of them work from either player; the guest's go to the server.
+
+## How to rebuild it
+
+`Scripts/build_combat.py` (open editor; tag `CombatBuilder`) builds the materials, the dodge input, the enemy Blueprints, the StateTree, the CombatTest map and its era maps, and the door in the first level. Re-running it rebuilds the arena from scratch and replaces only its own door in the first level.
+
+## How to test
+
+- `powershell -File Scripts/tools/run_combat_test.ps1 -Mode normal` (editor open): 56 checks in a fresh 2-player PIE session on CombatTest. `-Mode host_saraa` swaps roles, `-Mode travel` walks through both doors, `-NetEmu average|bad` adds lag and loss.
+- `powershell -File Scripts/run_lan_test.ps1` (editor closed) now also sends two real game processes to the arena and back.
+
+## Known issues
+
+- **Greybox and placeholder sound:** enemies are built from engine shapes and the sounds are engine editor sounds; there are no attack animations yet (the hurt, roll and downed poses are simple mesh tilts and spins).
+- **The weapons don't follow the animations:** the bow and sword are placed relative to the character, not attached to the hands. (The user asked for this next.)
+- **The doors over real EOS aren't tested yet** with two processes. They use the same seamless travel as the lobby's Start Game, which is tested.
+- **Hit-stop** freezes only the enemy hit, not the whole game, so it stays fair online; it's subtle.
+- AI movement uses the navmesh, with direct steering as a fallback; flyers steer directly. Enemies can bunch up around a pillar.
+
+## Suggestions for Milestone 9
+
+- Attach the weapons to hand sockets and add real attack, hurt and roll animations (montages) on the existing hooks.
+- A boss using the same health component and filters: phases that need both players, like the Guardian and the Talon.
+- Combat in the real levels, where the Climb or the Crossing ends in a fight.
+- Real sounds and VFX (Niagara) for the hits, cracks, knockdowns and defeats.
+- Revive by your partner (hold a button near them) instead of a timer.
+
 # Milestone 7 – Real online play with Epic Online Services
 
 Branch: `milestone-7-online`, branched from `main` (Milestone 6 was merged). Nothing was pushed.

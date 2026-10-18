@@ -336,3 +336,67 @@ Tested on 2026-10-16 on branch `milestone-7-online`.
 
 - Swapped roles over EOS (the guest hosting). Hosting doesn't depend on which account hosts, and the PIE tests already cover the host playing Saraa.
 - **The real test on two PCs, on different internet connections, with a friend:** `MANUAL_TEST.md`. It's the only way to check real NAT traversal, voice audio, the Epic overlay invites, and account-portal sign-in (these tests sign in through the Dev Auth Tool).
+## Milestone 8: baseline before starting, then results
+
+Tested on 2026-10-18 on branch `milestone-8-combat`.
+
+### Baseline (start of Milestone 8, before any changes): earlier mechanics confirmed
+
+| Suite | Result |
+|---|---|
+| LAN, two real game processes (`run_lan_test.ps1`) | ✅ PASS / PASS |
+| Online menus in PIE (`run_frontend_test.ps1 -Mode online`) | ✅ 38/38 |
+| Milestone 1 (`test_pie_live.py`) | ✅ PASS |
+| The Climb | ✅ 60/60 |
+| The Crossing | ✅ 67/67, 0 corrections |
+| Eras | ✅ 38/38 |
+
+The real EOS flow and its lag and soak tests had passed two days earlier (Milestone 7, above).
+
+### Milestone 8 results (end of milestone)
+
+| Test | Result |
+|---|---|
+| Builds | ✅ Editor and Game targets, 0 errors, 0 warnings |
+| **Combat**, host Bat / guest Saraa (`run_combat_test.ps1 -Mode normal`) | ✅ **56/56** |
+| **Combat**, roles swapped (`-Mode host_saraa`) | ✅ 56/56 |
+| Combat with **average** network emulation (60 ms ± 10, 1% loss), both role setups | ✅ 56/56, 56/56 |
+| Combat with **bad** network emulation (150 ms ± 30, 5% loss; ping about 180 ms), both role setups | ✅ 56/56, 56/56 |
+| **Doors** in PIE (`-Mode travel`): Bat walks into the arena's return door, then the first level's Combat Test door | ✅ 10/10: both players travel each time, each loads only their own era, and both arrive at the door's starts (8 cm away) |
+| Doors with bad network emulation | ✅ 10/10 |
+| **Doors between two real LAN game processes** (`run_lan_test.ps1`, extended): lobby → level → CombatTest → level | ✅ PASS / PASS: both arrive every time, the host still Bat in the present, the guest still Saraa in the past |
+| Regression: Milestone 1, canyon, The Climb, The Crossing, Eras | ✅ PASS, PASS, 60/60, 67/67, 38/38 |
+| Regression: title and settings, online menus (`run_frontend_test.ps1`) | ✅ 52/52, 38/38 |
+| Regression: headless end-to-end (`run_spirit_path_test.ps1`) | ✅ PASS |
+
+**What the 56 combat checks cover:**
+- **Health and debug:** health replicates both ways, and `EchoHurt` and `EchoGod` work from the guest.
+- **Presence:** who sees, bumps into and can hurt each of the four enemies, on both machines.
+- **Stone Guardian:** arrows are blocked; the whip opens it (and the guest sees the open timer); arrows hurt it while open; the shell reforms.
+- **Sky Talon:** the whip is blocked; an arrow knocks it down; it falls (both machines); the whip hurts it, arrows don't; it flies back up.
+- **Bow:** quick, aimed and charged shots through real input, each for its damage, **fired through Saraa standing in the way**; the charged shot is a heavy hit.
+- **Whip:** the 3-lash combo (12 + 12 + 20) and the charged lash (40).
+- **Dodge:** both players' rolls are granted by the server, with invulnerability, about 6.5 m.
+- **AI:** the StateTree runs; Wraiths only target Bat and Shades only Saraa; attacks are telegraphed (wind-up, strike, recover seen on the other machine) and land.
+- **Downed:** a player goes down, comes back beside the partner after 3 s; both down restarts the arena at the entrance.
+- **Waves:** all four, with the right enemies, shown on the guest's HUD, through to "cleared".
+- **The rest:** the restart pad, `EchoSkipToWave` from the guest, and `EchoShowAllEnemies`.
+
+### Bugs the tests caught (all fixed)
+
+1. **A shot could fly backwards.** The bow's aim trace stopped on what the EchoArrow channel blocks by default, which includes Saraa's capsule; the arrow itself flies through players. With Saraa next to Bat, the aim point landed beside him. The trace now ignores what the arrow ignores and starts past the bow.
+2. **The host's own dodge was refused.** On the listen server the same component asked for the roll and checked the server cooldown, sharing one timestamp. The two are now timed separately.
+3. **The guest's open/stun timer bars were wrong** when an enemy's open time was changed on the server. The time it opened is now replicated, not just when it closes.
+4. **A door sent the host to the lobby with "Saraa left the game."** In a hard travel the guest disconnects on purpose to reconnect, and the Milestone 7 "partner left" rule caught it. It's ignored while travelling.
+5. **The guest couldn't reconnect after a door in PIE.** The hard travel was absolute, which resets the listen port to 7777 while PIE's guest reconnects to 17777. The travel is relative now, keeping the host's address and port.
+
+### Test conditions and tooling notes
+
+- **A door opened from inside editor Python** (teleporting a player into its trigger) runs the guest's ClientTravel RPC on the host: the Milestone 5 lesson again. The travel test walks Bat in with real movement input, and the LAN test queues `EchoGoTo` for the next engine tick.
+- The bow test aims from the camera, as a player does with the reticle: the aiming camera sits over the shoulder, so aiming from the character's centre missed.
+- The tests switch off the arena's start zone until the wave checks, so moving players around doesn't start a wave early.
+
+### Not yet run
+
+- **The doors over real EOS** (two processes, `run_eos_test.ps1`): it needs the Dev Auth Tool running with `Default` and `Default2` signed in. Online the doors use seamless travel, the same as the lobby's Start Game, which passed over EOS in Milestone 7.
+- A hands-on playtest of how the combat feels.
