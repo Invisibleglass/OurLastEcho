@@ -108,7 +108,7 @@ Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrol
 
 ## Engine & toolchain
 
-- **Unreal Engine 5.8.3**, installed at `D:\UE_5.8`. It's a registered (non-launcher) build: the `.uproject`'s `EngineAssociation` is a GUID that maps to that path via `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`.
+- **Unreal Engine 5.8.4** (the Epic Launcher updated it from 5.8.3 on 2026-10-20), installed at `D:\UE_5.8`. The `.uproject`'s `EngineAssociation` is a GUID; on this PC the install is found through the Epic Launcher's list (`%ProgramData%\Epic\UnrealEngineLauncher\LauncherInstalled.dat`, app `UE_5.8`), not the `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds` key (empty). Players need the same engine version to connect, and a Launcher update changes it: repackage after one.
 - Visual Studio 2022 Community (Game dev C++ workload, MSVC 14.44, Windows SDK 10.0.22621).
 - Single runtime module: **`OurLastEcho`** (`Source/OurLastEcho/`). Dependencies are in `OurLastEcho.Build.cs`.
 - The project root (this folder, with the `.uproject`) sits inside an outer folder that is also named `OurLastEcho`. Git and this file live here in the inner one.
