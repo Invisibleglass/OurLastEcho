@@ -14,6 +14,14 @@ Branch: `milestone-8-combat`, branched from `milestone-7-online` (Milestone 7 is
 4. Behind the start: the **return door** (back to the first level, beside the Combat Test door) and a **Restart arena** button on a plinth (step on it).
 5. Or open `/Game/Echo/Maps/CombatTest` in the editor and press Play.
 
+## Playing online without packaging ("Play Online.bat")
+
+Double-click **`Play Online.bat`** in the project folder. It starts the game as a real standalone game (not Play In Editor), so it signs in with Epic and plays online like the packaged build, with content straight from the project. A friend with the repo can play the newest commit right after `git pull`.
+- It finds Unreal Engine 5.8 itself (the Epic Launcher's install list, or the project's engine association). Override with `powershell -File Scripts\play_online.ps1 -Engine "<engine folder>"`.
+- On a PC where the game code isn't compiled yet (`Binaries/` isn't in git) it builds it first: that needs **Visual Studio 2022** with "Game development with C++".
+- It needs **`Config/Windows/WindowsEngine.ini`** (the EOS IDs). It isn't in git because the repo is public: send it privately.
+- Both players need the **same engine version**, or the connection is refused as "different versions of the game".
+
 ## Controls
 
 | | Keyboard and mouse | Gamepad |
