@@ -45,14 +45,19 @@ Problems? Send your friend the newest file in OurLastEcho\Saved\Logs\OnlineSessi
 # Smoke test: start the packaged game straight into each gameplay level and fail if anything it loads by path is
 # missing from the build. (The first friend test had no input actions or arena in the build: pause, weapons and the
 # door did nothing, and the editor's tests can't see that because everything is on disk there.)
-$GameLog = Join-Path $Game "OurLastEcho\Saved\Logs\OurLastEcho.log"
+$LogDir = Join-Path $Game "OurLastEcho\Saved\Logs"
+$GameLog = Join-Path $LogDir "OurLastEcho.log"
 $Missing = @()
 foreach ($Map in "/Game/Echo/Maps/Lvl_SpiritPath", "/Game/Echo/Maps/CombatTest") {
-    $Run = Start-Process (Join-Path $Game "OurLastEcho.exe") -PassThru -ArgumentList $Map, "-windowed", "-ResX=640", "-ResY=360",
-        "-nosound", "-ini:Engine:[OnlineSubsystem]:DefaultPlatformService=Null"
+    Remove-Item $LogDir -Recurse -Force -ErrorAction SilentlyContinue
+    Start-Process (Join-Path $Game "OurLastEcho.exe") -ArgumentList $Map, "-windowed", "-ResX=640", "-ResY=360",
+        "-nosound", "-ini:Engine:[OnlineSubsystem]:DefaultPlatformService=Null" | Out-Null
     Start-Sleep 45
-    Stop-Process -Id $Run.Id -Force -ErrorAction SilentlyContinue
-    Start-Sleep 2
+    # OurLastEcho.exe only starts the real game (Binaries\Win64\OurLastEcho*.exe) and exits: close every game process,
+    # or the next run becomes a second instance writing a different log
+    Get-Process | Where-Object { $_.ProcessName -like "OurLastEcho*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep 3
+    if (-not (Test-Path $GameLog)) { $Missing += "${Map}: the game wrote no log"; continue }
     $Bad = Select-String -Path $GameLog -Pattern "SkipPackage|Failed to find object|file not found|missing \(run Scripts" | ForEach-Object { $_.Line.Trim() }
     $Eras = Select-String -Path $GameLog -Pattern "Eras: .* ready, fading in" -Quiet
     # A map missing from the build doesn't error: the game quietly loads another one instead
