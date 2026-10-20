@@ -42,6 +42,34 @@ Our Last Echo (test build)
 Problems? Send your friend the newest file in OurLastEcho\Saved\Logs\OnlineSessions.
 "@ | Set-Content -Encoding utf8 (Join-Path $Game "READ ME FIRST.txt")
 
+# Smoke test: start the packaged game straight into each gameplay level and fail if anything it loads by path is
+# missing from the build. (The first friend test had no input actions or arena in the build: pause, weapons and the
+# door did nothing, and the editor's tests can't see that because everything is on disk there.)
+$GameLog = Join-Path $Game "OurLastEcho\Saved\Logs\OurLastEcho.log"
+$Missing = @()
+foreach ($Map in "/Game/Echo/Maps/Lvl_SpiritPath", "/Game/Echo/Maps/CombatTest") {
+    $Run = Start-Process (Join-Path $Game "OurLastEcho.exe") -PassThru -ArgumentList $Map, "-windowed", "-ResX=640", "-ResY=360",
+        "-nosound", "-ini:Engine:[OnlineSubsystem]:DefaultPlatformService=Null"
+    Start-Sleep 45
+    Stop-Process -Id $Run.Id -Force -ErrorAction SilentlyContinue
+    Start-Sleep 2
+    $Bad = Select-String -Path $GameLog -Pattern "SkipPackage|Failed to find object|file not found|missing \(run Scripts" | ForEach-Object { $_.Line.Trim() }
+    $Eras = Select-String -Path $GameLog -Pattern "Eras: .* ready, fading in" -Quiet
+    # A map missing from the build doesn't error: the game quietly loads another one instead
+    $Loaded = Select-String -Path $GameLog -Pattern ("Load map complete " + [regex]::Escape($Map) + "$") -Quiet
+    if ($Bad) { $Missing += $Bad }
+    if (-not $Loaded) { $Missing += "${Map}: not in the build (another map loaded instead)" }
+    if (-not $Eras) { $Missing += "${Map}: the era layer never finished loading" }
+    Write-Output ("SMOKE {0}: {1}" -f $Map, $(if ($Bad -or -not $Loaded -or -not $Eras) { "problems" } else { "ok" }))
+}
+# Don't send the smoke runs' logs and settings along with the build
+Remove-Item (Join-Path $Game "OurLastEcho\Saved") -Recurse -Force -ErrorAction SilentlyContinue
+if ($Missing) {
+    $Missing | Select-Object -Unique | ForEach-Object { Write-Output "  $_" }
+    Write-Output "PACKAGE FAILED: the build is missing content (not zipped)"
+    exit 1
+}
+
 $Zip = Join-Path $Out "OurLastEcho-Win64.zip"
 Remove-Item $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path (Join-Path $Game "*") -DestinationPath $Zip -CompressionLevel Optimal
