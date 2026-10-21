@@ -2,7 +2,7 @@
 
 An online 2-player co-op game in Unreal Engine 5. **Bat** (player 1, the listen-server host) is a grieving brother in the present-day canyon. **Saraa** (player 2) is his late sister, in the canyon's ancient past, the afterlife. Core idea: each player sees and touches things the other can't.
 
-Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrolling variant code and levels are still in the project but unused. Work is organised into milestones from briefs the user provides; see `NOTES.md` for the latest milestone's status and test steps.
+Started from the **Third Person C++ template**. Its Combat/Platforming/SideScrolling variant code and levels are still in the project but unused. Work is organised into milestones from briefs the user provides; see `NOTES.md` for the latest milestone's status and test steps. The game's design (story, both worlds, mechanics, chapters, art) is in **`GDD.md`**, with each feature marked built / partly built / planned: keep those markers current when a milestone changes what's built.
 
 ## Gameplay architecture (Milestone 1)
 
